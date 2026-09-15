@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Git 分支浏览器</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./controls.js" defer></script>
+  <script src="./app.js" defer></script>
+  <script src="./operations.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button id="toggle-branches" class="icon-button" data-icon="panel" aria-label="展开或收起分支列表" aria-expanded="false"></button>
+    <div class="brand"><strong>Git</strong><span class="brand-separator">/</span><span id="repo-name">正在连接…</span></div>
+    <span class="read-only"><i></i><span id="mode-label">只读</span></span>
+    <button id="choose-repo" class="icon-button" title="选择仓库" aria-label="选择仓库" hidden><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></button>
+    <button id="refresh" class="button" data-icon="refresh" title="重新读取本地分支和提交"><span>刷新</span></button>
+    <select id="theme" aria-label="界面主题" title="与 Codex 外观一致时选择相同主题">
+      <option value="auto">自动主题</option><option value="light">浅色</option><option value="dark">深色</option>
+    </select>
+    <button id="stop" class="icon-button" data-icon="power" title="停止本地浏览会话" aria-label="停止浏览会话"></button>
+  </header>
+  <div id="error" role="alert" hidden></div>
+  <div id="notice" class="notice" hidden></div>
+  <div id="operation-result" class="operation-result" role="status" hidden></div>
+  <form id="repo-picker" class="repo-picker" hidden>
+    <h2 id="repo-picker-title">打开 Git 仓库</h2>
+    <p id="repo-picker-message">输入本地仓库的完整路径，查看分支和提交记录。</p>
+    <div id="repo-context-checks" class="context-checks" role="status" aria-live="polite" hidden></div>
+    <div id="repo-context-paths" class="context-paths" hidden></div>
+    <button id="recheck-context" class="button primary" type="button" hidden>重新检查</button>
+    <p id="repo-manual-divider" class="manual-divider" hidden>也可以手动打开仓库</p>
+    <div id="repo-candidates" class="repo-candidates" hidden></div>
+    <label for="repo-input">仓库目录</label>
+    <input id="repo-input" type="text" placeholder="/path/to/project" autocomplete="off" spellcheck="false" required>
+    <button id="open-repo" class="button primary" type="button">打开仓库</button>
+    <button id="cancel-repo" class="text-button" type="button" hidden>取消</button>
+  </form>
+  <main class="workspace">
+    <div id="scrim" hidden></div>
+    <aside id="sidebar" class="sidebar" aria-label="分支列表">
+      <div class="side-heading"><h2>分支</h2><span id="branch-count" class="counter">0</span></div>
+      <input id="branch-search" type="search" placeholder="搜索分支…" aria-label="搜索分支" autocomplete="off">
+      <div class="segments" role="group" aria-label="分支类型">
+        <button data-kind="all" class="active" aria-pressed="true">全部</button>
+        <button data-kind="local" aria-pressed="false">本地</button>
+        <button data-kind="remote" aria-pressed="false">远程</button>
+      </div>
+      <nav id="branches" aria-label="选择分支"></nav>
+      <div class="side-footer"><span class="tiny-dot"></span>远程分支为最近 fetch 的本地记录</div>
+    </aside>
+    <section class="history" aria-labelledby="branch-title">
+      <div class="history-heading">
+        <div class="eyebrow">提交历史</div>
+        <h1 id="branch-title">选择一个分支</h1>
+        <p id="branch-description">从分支开始，追溯每一次改动。</p>
+        <div id="git-actions" class="git-actions" hidden>
+          <button id="open-workspace" class="button">工作区 <span id="change-count" class="counter">…</span></button>
+          <button id="create-branch" class="button" data-icon="plus">新建分支</button>
+          <select id="branch-action" aria-label="分支操作">
+            <option value="">分支操作…</option>
+            <option value="switch">切换到此分支</option>
+            <option value="merge">合并到当前分支</option>
+            <option value="delete">删除此本地分支</option>
+          </select>
+        </div>
+      </div>
+      <form id="filters" class="filters">
+        <div class="search-row">
+          <input id="commit-search" type="search" maxlength="300" placeholder="搜索提交信息…" aria-label="搜索提交信息">
+          <input id="author-search" type="search" maxlength="300" placeholder="作者或邮箱" aria-label="按作者或邮箱筛选">
+          <button id="search-commits" class="button primary" type="button">搜索</button>
+        </div>
+        <div class="filter-bottom">
+          <label><input id="first-parent" type="checkbox">仅第一父链</label>
+          <button id="clear-filters" class="text-button" type="button">清除筛选</button>
+        </div>
+      </form>
+      <div class="list-caption"><span id="history-status" role="status">等待仓库…</span><span>最新 → 最早</span></div>
+      <div class="commit-scroll">
+        <div id="commits"></div>
+        <button id="load-more" class="button load-more" hidden>加载更多提交</button>
+      </div>
+      <footer class="history-footer"><span id="repo-path"></span><span>Git · 本地读取</span></footer>
+    </section>
+    <section id="detail" class="detail" aria-label="提交详情" hidden>
+      <header class="detail-toolbar">
+        <button id="close-detail" class="text-button" data-icon="arrow-left">返回提交列表</button>
+        <span class="eyebrow">提交详情</span>
+      </header>
+      <div class="detail-scroll">
+        <div id="commit-detail"></div>
+        <div id="file-section" hidden>
+          <div class="file-heading"><h3>变更文件 <span id="file-count" class="counter"></span></h3><span class="muted">点击查看差异</span></div>
+          <div id="files" class="files"></div>
+          <div id="patch-section" hidden>
+            <div class="patch-heading"><code id="patch-path"></code><span id="patch-stats"></span></div>
+            <p id="patch-notice" class="patch-notice" hidden></p>
+            <pre id="patch" aria-label="文件差异"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dialog id="work-dialog" class="operations-modal work-dialog" aria-labelledby="work-title">
+    <header class="operations-header"><div><h2 id="work-title">工作区</h2><p id="work-branch"></p></div><button id="close-work" class="icon-button" data-icon="close" aria-label="关闭工作区"></button></header>
+    <div class="operations-body">
+      <div class="work-toolbar"><button id="refresh-work" class="button" data-icon="refresh">刷新</button><span></span><button data-network="fetch" class="button" data-icon="download">获取</button><button data-network="pull" class="button" data-icon="arrow-down">拉取</button><button data-network="push" class="button" data-icon="arrow-up">推送</button></div>
+      <p id="work-error" class="operations-error" role="alert" hidden></p>
+      <div id="work-result" class="work-result" role="status" hidden></div>
+      <div id="work-progress" class="work-progress" hidden></div>
+      <div id="work-changes"></div>
+      <div id="work-patch-section" hidden><div class="work-patch-heading"><code id="work-patch-path"></code><button id="close-work-patch" class="text-button">收起差异</button></div><pre id="work-patch"></pre></div>
+      <div class="commit-form"><label for="commit-message">提交说明</label><textarea id="commit-message" rows="3" maxlength="10000" placeholder="描述这次更改…"></textarea><div><span id="commit-hint" class="muted">仅提交已暂存的更改</span><button id="prepare-commit" class="button primary">预览提交</button></div></div>
+    </div>
+  </dialog>
+  <dialog id="operation-dialog" class="operations-modal" aria-labelledby="operation-title">
+    <header class="operations-header"><h2 id="operation-title">Git 操作</h2><button id="close-operation" class="icon-button" data-icon="close" aria-label="关闭操作"></button></header>
+    <div class="operations-body"><div id="operation-content"></div><p id="operation-error" class="operations-error" role="alert" hidden></p></div>
+    <footer class="operations-footer"><button id="cancel-operation" class="button">取消</button><button id="confirm-operation" class="button primary" disabled>预览操作</button></footer>
+  </dialog>
+</body>
+</html>

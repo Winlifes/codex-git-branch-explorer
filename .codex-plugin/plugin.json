@@ -1,0 +1,41 @@
+{
+  "name": "git-branch-explorer",
+  "version": "0.2.0",
+  "description": "在 Codex 右侧面板浏览 Git 分支与历史，预览确认提交、分支管理和远程操作。",
+  "author": {
+    "name": "Winlifes",
+    "url": "https://github.com/Winlifes"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Git 分支浏览器",
+    "shortDescription": "在侧边面板查看 Git 历史并操作仓库",
+    "longDescription": "在 Codex 原生侧边面板入口显示 Git 分支。浏览本地和远程分支、提交历史与差异；通过预览确认暂存、提交、分支切换、创建、合并、撤销、删除已合并分支，以及获取、拉取和推送。跟随 Codex 主题与字体。",
+    "developerName": "Winlifes",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "brandColor": "#737373",
+    "defaultPrompt": [
+      "在右侧面板查看当前项目的 Git 分支和提交记录",
+      "打开 Git 分支浏览器",
+      "查看某个分支的提交历史和代码改动"
+    ],
+    "websiteURL": "https://github.com/Winlifes/codex-git-branch-explorer",
+    "privacyPolicyURL": "https://github.com/Winlifes/codex-git-branch-explorer/blob/main/PRIVACY.md"
+  },
+  "homepage": "https://github.com/Winlifes/codex-git-branch-explorer",
+  "repository": "https://github.com/Winlifes/codex-git-branch-explorer",
+  "keywords": [
+    "git",
+    "codex",
+    "branches",
+    "history",
+    "diff",
+    "mcp"
+  ]
+}

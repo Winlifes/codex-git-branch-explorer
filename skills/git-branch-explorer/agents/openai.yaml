@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git 分支浏览器"
+  short_description: "在 Codex 右侧面板查看 Git 历史，并预览确认分支、提交与远程操作"
+  default_prompt: "使用 $git-branch-explorer 在右侧面板查看当前项目的 Git 分支和提交记录。"
