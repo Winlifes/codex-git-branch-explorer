@@ -1,6 +1,7 @@
 {
   "name": "git-branch-explorer",
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "license": "MIT",
   "description": "在 Codex 右侧面板浏览 Git 分支与历史，预览确认提交、分支管理和远程操作。",
   "author": {
     "name": "Winlifes",

@@ -73,4 +73,6 @@ python3 scripts/build_release.py
 
 ## 授权
 
-目前公开源码和安装包，暂未附加开源许可证。
+采用 [MIT 许可证](LICENSE)。Copyright (c) 2026 Winlifes。
+
+Licensed under the [MIT License](LICENSE).

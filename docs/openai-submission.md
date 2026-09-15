@@ -7,6 +7,7 @@ Status: distribution through this Git repository. No OpenAI approval or official
 - Name: Git 分支浏览器 / Git Branch Explorer
 - ID: `git-branch-explorer`
 - Maintainer: [Winlifes](https://github.com/Winlifes)
+- License: [MIT](../LICENSE), Copyright (c) 2026 Winlifes
 - Source: [codex-git-branch-explorer](https://github.com/Winlifes/codex-git-branch-explorer)
 - Releases: [download and checksums](https://github.com/Winlifes/codex-git-branch-explorer/releases)
 - Support: [issues](https://github.com/Winlifes/codex-git-branch-explorer/issues)

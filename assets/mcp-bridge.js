@@ -50,7 +50,7 @@ window.GitHost = (() => {
       window.parent.postMessage({jsonrpc: "2.0", id: message.id, result: {}}, hostOrigin);
     }
   });
-  const ready = request("ui/initialize", {appInfo: {name: "git-branch-explorer", version: "0.2.0"},
+  const ready = request("ui/initialize", {appInfo: {name: "git-branch-explorer", version: "0.2.1"},
     appCapabilities: {}, protocolVersion: "2026-01-26"}).then(result => {
       updateContext(result.hostContext || {});
       notify("ui/notifications/initialized");

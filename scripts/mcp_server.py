@@ -15,7 +15,7 @@ from project_context import ProjectContext
 ROOT = Path(__file__).resolve().parents[1]
 URI = "ui://git-branch-explorer/panel.html"
 MIME = "text/html;profile=mcp-app"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False,
                "idempotentHint": True, "openWorldHint": False}
 REPO_PROPERTY = {"type": "string", "description": "本地 Git 仓库的绝对路径；省略时自动读取当前 Codex 任务的项目目录。"}
