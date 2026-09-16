@@ -1,22 +1,44 @@
-# Git 分支浏览器
+# Git Branch Explorer
 
-在 Codex 右侧面板查看 Git 分支、提交历史和文件差异，并通过预览确认执行 Git 操作。
+**English** · [简体中文](README.zh-CN.md)
 
-A local Git workspace and history panel for Codex Desktop. Browse branches, commits and diffs, then preview and confirm repository changes.
+Browse Git branches, commit history and file diffs in the Codex right panel. Manage your working tree and branches with a preview before every change.
 
-这是独立开发的第三方插件，目前通过本仓库分发，尚未上架 OpenAI 官方插件目录。无需修改 Codex 本体。
+[Download](https://github.com/Winlifes/codex-git-branch-explorer/releases/latest) · [Report an issue](https://github.com/Winlifes/codex-git-branch-explorer/issues) · [MIT License](LICENSE)
 
-## 安装
+![Light theme: local and remote branches, commit history, timestamps and line counts](docs/screenshots/history-light.jpg)
 
-需要 Git、Python 3.9+ 和支持 MCP thread entrypoints 的 Codex 桌面客户端。当前已在 macOS、客户端附带 CLI `0.154.0-alpha.6.2` 上验证；其他平台与版本尚未完成兼容验证。
+*Real captures of v0.2.1 running against the disposable `orbit-notes` demo repository in a local MCP development host. The images show the plugin panel, without the surrounding Codex window. The panel UI is currently Chinese; documentation is available in English and Chinese.*
 
-从 [Releases](https://github.com/Winlifes/codex-git-branch-explorer/releases) 下载安装包并解压，在插件目录执行：
+This is an independently developed, third-party plugin distributed through this repository. It is not currently listed in the official OpenAI plugin directory. Installation does not modify the Codex application.
 
-```sh
-python3 scripts/install.py
-```
+[Features](#features) · [Install](#install) · [Screenshots](#screenshots) · [How operations work](#how-operations-work) · [Compatibility](#compatibility) · [Development](#development)
 
-也可以克隆源码安装：
+## Features
+
+| Area | What you can do |
+| --- | --- |
+| Branches | Browse local and remote-tracking branches, identify the current branch and see upstream ahead/behind status. |
+| History | Browse each branch's commits with pagination, search by message or author, and filter to the first-parent history. |
+| Commit details | See the full message, author, SHA, date and time, added/deleted line counts, changed files and per-file diffs. Choose a parent for merge commit diffs. |
+| Working tree | Inspect staged and unstaged changes; stage or unstage one file or all files; commit the staged changes. |
+| Discard changes | Discard one file's or all files' unstaged changes while preserving the index. Local backups are created before discarding. |
+| Branch operations | Create, switch and merge branches; revert commits with a new reverse commit; delete merged local branches. |
+| Remotes and conflicts | Fetch, pull with fast-forward only, push without force and set an upstream. Stage resolved conflicts, then continue or abort a merge/revert. |
+| Appearance | Follow the Codex theme or select light/dark mode, with themed menus, thin scrollbars and a branch drawer for narrow panels. |
+
+Selecting a branch changes the history you are browsing; it does not check it out. **Refresh** rereads local Git data; use **Fetch** to update remote-tracking branches.
+
+## Install
+
+### Requirements
+
+- Git and Python **3.9+**.
+- Codex Desktop with support for **MCP thread entrypoints**. Validated on macOS with the desktop-bundled Codex CLI `0.154.0-alpha.6.2`; other versions and platforms have not been verified.
+
+No third-party Python packages, npm, API key or developer-hosted cloud service are required.
+
+### From this repository
 
 ```sh
 git clone https://github.com/Winlifes/codex-git-branch-explorer.git
@@ -24,55 +46,106 @@ cd codex-git-branch-explorer
 python3 scripts/install.py
 ```
 
-安装器将插件复制到 `~/plugins/git-branch-explorer`，配置本机 MCP 启动路径，再注册并安装到个人插件市场。无需第三方 Python 包、npm、API Key 或云端服务。若找不到 `codex` 命令，会显示可手动执行的安装命令。
+Alternatively, download and extract a ZIP from [Releases](https://github.com/Winlifes/codex-git-branch-explorer/releases/latest), then run `python3 scripts/install.py` from the extracted plugin directory.
 
-在现有任务或新任务中，打开右侧面板，点击 **＋ → Git 分支**。若安装后入口未出现，等正在运行的任务完成，再退出并重新打开 Codex，然后回到原任务。
+The installer copies the plugin to `~/plugins/git-branch-explorer`, configures the local MCP launch path, registers it in your personal plugin marketplace and runs `codex plugin add`. If it cannot find the Codex CLI, it prints the command to run manually.
 
-尚未发送消息的新任务可能无法提供项目目录。面板会提示检查消息状态；发送消息后关闭并重新打开 Git 分支，或手动选择仓库。已有任务可以继续使用。
+### Open the panel
 
-**已安装用户：** 安装器不会覆盖已有插件目录。重复从其他目录安装时会停止并说明原因；请保留现有源码，按 [更新说明](docs/architecture.md#验证与更新) 操作。当前不支持自动更新。
+1. Open an existing or new Codex task for your Git project.
+2. Open the right panel, click **＋**, then select **Git 分支** (Git Branches).
+3. Select a branch to browse its history. Open **工作区** (Working Tree) to inspect and manage local changes.
 
-## 功能
+If the entry is missing after installation, let running tasks finish, quit and reopen Codex, then return to your task. Existing tasks are supported; there is no need to recreate them.
 
-- 本地和远程跟踪分支、当前分支、提交搜索、分页历史与逐文件差异。
-- 提交显示完整日期时间，以及新增、删除行数；合并提交可选择父提交查看差异。
-- 工作区按文件或批量暂存、取消暂存；只提交暂存区内容。
-- 单文件或全部撤回未暂存改动，保留暂存区内容，撤回前保存本地备份。
-- 创建、切换、合并分支，撤销提交，以及删除已合并的本地分支。
-- 获取、快进拉取和普通推送；冲突解决后可继续或中止合并/撤销。
-- 随 Codex 切换浅色与深色主题，使用统一下拉菜单、滚动条和窄面板布局。
+The plugin uses the current task's project directory when available, including its worktree. A new task may not expose that directory before its first message. The panel then displays message/context checks: send a message, close and reopen **Git 分支**, or choose a repository manually. Once the project directory is available, the panel checks it for Git repositories and shows any specific error.
 
-浏览分支不会 checkout，刷新不会 fetch。每次写操作先显示预览；确认凭据有效期为 5 分钟，执行前重新核对仓库状态。暂不提供强制推送、硬重置、强制删除或删除远程分支。
+### Existing installations
 
-撤回备份位于对应工作树的 Git 数据目录下 `codex-git-explorer/discard-backups/`。界面显示实际位置，`manifest.json` 对应原路径及备份内容；备份不会自动删除，可据此手动恢复。
+Updates are manual. The installer stops if `~/plugins/git-branch-explorer` already exists and is different from the installation source, so running it from another checkout does not overwrite your files. The current developer update workflow is described in [Architecture: validation and updates (Chinese)](docs/architecture.md#验证与更新).
 
-## English quick start
+## Screenshots
 
-Install Git, Python 3.9+ and a Codex Desktop build supporting MCP thread entrypoints. Clone this repository or extract a release, then run `python3 scripts/install.py`. Open the right panel and select **+ → Git 分支**. Reload Codex if the installed entry is missing. The interface currently uses Chinese.
+### Commit details in dark mode
 
-Git runs locally using your existing identity, credentials, hooks and signing configuration. Repository writes require an explicit preview and confirmation in the panel. The plugin does not run a developer-hosted cloud service or collect telemetry. See [Privacy](PRIVACY.md) for data handling and [architecture and limitations](docs/architecture.md) for compatibility details.
+Inspect the commit metadata and changed files alongside a text diff. Commit rows show added and deleted line counts and the local date/time; the time tooltip includes seconds and the time zone.
 
-## 开发与测试
+![Dark theme: commit metadata, changed files and a JavaScript diff](docs/screenshots/commit-diff-dark.jpg)
+
+<details>
+<summary><strong>Working tree: staged and unstaged files</strong></summary>
+
+Stage or unstage individual files, use the bulk actions, and write a message to preview a commit. Only staged content is committed.
+
+![Working tree with three unstaged files, one staged file and commit controls](docs/screenshots/workspace-light.jpg)
+
+</details>
+
+<details>
+<summary><strong>Discard preview: review the exact affected files</strong></summary>
+
+The confirmation lists the repository, current branch and affected paths. Staged changes are preserved, and current file contents are backed up before the discard runs.
+
+![Discard confirmation for three demo files, explaining index preservation and backups](docs/screenshots/discard-preview.jpg)
+
+</details>
+
+## How operations work
+
+Every write operation first shows a concrete preview. Confirmation tokens expire after five minutes, and the plugin rechecks the repository state before execution. If the state changes, generate and confirm a new preview.
+
+- **Commits** include only staged changes. Git uses your existing identity, credentials, hooks and signing configuration.
+- **Discard** applies to unstaged changes. Partially staged files are restored to their index version. To discard staged edits, unstage them first.
+- **Untracked files** are backed up, then removed only at the exact paths listed in the preview. Ignored files are excluded; submodules, nested repositories and conflicted paths require separate handling.
+- **Switch, merge, pull and revert** require a clean working tree. Pull is fast-forward only; branch deletion is limited to local branches merged into the current branch.
+- **Revert** creates a reverse commit and preserves history. Hard reset, force push, force deletion and remote branch deletion are not available.
+
+Discard backups are stored under `codex-git-explorer/discard-backups/` inside the worktree's Git metadata directory. The result shows the actual location. Each backup's `manifest.json` maps original paths, file modes and symlink targets to the saved data. Backups are retained for manual recovery; they are not deleted automatically.
+
+## Compatibility
+
+- The native panel entry and automatic project lookup depend on the Codex client's MCP entrypoint support and local metadata formats. These may vary between versions. A manual repository picker is available when project context cannot be resolved.
+- There is currently no application-level keyboard shortcut for opening this plugin panel.
+- Worktrees, repository subdirectories, empty repositories and detached HEAD are supported. Bare repositories are read-only.
+- Remote-tracking branches reflect the last fetch. Shallow clones expose only locally available history.
+- Binary files show a diff notice. Renames appear as deletion/addition, and individual text diffs larger than 800 KB are truncated with a notice.
+- Git operations that need interactive authentication or signing may need to be completed in a terminal. After an operation timeout, refresh to inspect the state before attempting another operation.
+
+## Data and privacy
+
+Git runs locally. Repository queries and project metadata are passed to the Codex host and panel through MCP. The plugin has no maintainer-operated data service, telemetry or analytics. Confirmed remote operations use your repository's configured Git remotes; Git hooks and credential helpers follow your local configuration. See [Privacy](PRIVACY.md) for details.
+
+## Development
+
+Run the test suite and build a portable release archive:
 
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/build_release.py
 ```
 
-写操作测试使用临时仓库和本机临时远程。构建产物位于 `dist/`，包含 ZIP 与 SHA-256 校验文件；构建器仅收集插件代码、测试和公开文档，不包含 Git 历史或本机安装配置。
+Write-operation tests use disposable repositories and local bare remotes. The build creates a ZIP and SHA-256 checksum in `dist/`, including both READMEs and the screenshots. Git history and local installation configuration are excluded.
 
-## 文档和支持
+A standalone, read-only browser mode is also available for debugging:
 
-- [功能、实现与兼容性](docs/architecture.md)
-- [数据与隐私](PRIVACY.md)
-- [发布记录](CHANGELOG.md)
-- [OpenAI 上架准备与复现场景](docs/openai-submission.md)
-- [问题反馈](https://github.com/Winlifes/codex-git-branch-explorer/issues)
+```sh
+python3 scripts/git_explorer.py start --repo "/path/to/your/repository"
+```
 
-反馈时请使用可分享的示例，不要附上凭据、私有源码或包含敏感路径的完整日志。
+It prints a temporary localhost URL. Git write controls require the MCP panel environment.
 
-## 授权
+## Documentation and support
 
-采用 [MIT 许可证](LICENSE)。Copyright (c) 2026 Winlifes。
+- [Chinese README](README.zh-CN.md)
+- [Architecture, implementation and detailed limitations (Chinese)](docs/architecture.md)
+- [Privacy](PRIVACY.md)
+- [Changelog](CHANGELOG.md)
+- [OpenAI directory review preparation](docs/openai-submission.md)
+- [Screenshot capture notes](docs/screenshots/README.md)
+- [Report a bug or request a feature](https://github.com/Winlifes/codex-git-branch-explorer/issues)
 
-Licensed under the [MIT License](LICENSE).
+When reporting a problem, include your operating system, Codex version and steps using a shareable example. Keep credentials, private source code and sensitive paths out of public issues.
+
+## License
+
+[MIT](LICENSE) · Copyright (c) 2026 Winlifes.

@@ -7,7 +7,7 @@ import re
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TOP_LEVEL = {".gitignore", "README.md", "PRIVACY.md", "LICENSE", "CHANGELOG.md"}
+TOP_LEVEL = {".gitignore", "README.md", "README.zh-CN.md", "PRIVACY.md", "LICENSE", "CHANGELOG.md"}
 DIRECTORIES = {".codex-plugin", "assets", "docs", "scripts", "skills", "tests"}
 
 
