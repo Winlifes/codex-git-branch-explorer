@@ -49,8 +49,7 @@ window.GitUI = (() => {
     constructor(source) {
       this.source = source;
       this.menu = source.id === "branch-action";
-      this.name = source.getAttribute("aria-label") || [...(source.labels || [])].map(label =>
-        [...label.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join("").trim()).join(" ") || "选择选项";
+      this.name = this.label();
       this.wrapper = node("span", "select-control" + (source.id === "theme" ? " theme-control" : ""));
       source.before(this.wrapper); this.wrapper.append(source);
       source.hidden = true; source.tabIndex = -1; source.setAttribute("aria-hidden", "true");
@@ -83,12 +82,19 @@ window.GitUI = (() => {
       source.addEventListener("change", () => this.sync());
       this.sync();
     }
+    label() {
+      return this.source.getAttribute("aria-label") || [...(this.source.labels || [])].map(label =>
+        [...label.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join("").trim()).join(" ") || GitI18n.t("选择选项");
+    }
     sync() {
+      this.name = this.label();
+      this.button.setAttribute("aria-label", this.name);
+      this.popup.setAttribute("aria-label", this.name);
       const selected = this.source.selectedOptions[0];
-      const label = this.menu ? "分支操作" : selected?.textContent || "选择…";
+      const label = this.menu ? GitI18n.t("分支操作") : selected?.textContent || GitI18n.t("选择…");
       this.button.replaceChildren(node("span", "select-value", label), icon("chevron", "ui-icon select-chevron"));
       this.button.disabled = this.source.disabled;
-      this.button.title = this.source.title || (this.menu ? this.name : this.name + "：" + label);
+      this.button.title = this.source.title || (this.menu ? this.name : this.name + GitI18n.t("：") + label);
       if (active === this) { this.render(); this.position(); }
     }
     render() {
@@ -208,6 +214,9 @@ window.GitUI = (() => {
     if (active && !active.popup.contains(event.target)) active.close(false);
   }, true);
   window.addEventListener("resize", () => active?.close(false));
+  document.addEventListener("git-language-changed", () => {
+    for (const source of document.querySelectorAll("select")) controls.get(source)?.sync();
+  });
   for (const source of document.querySelectorAll("select")) enhance(source);
   for (const button of document.querySelectorAll("[data-icon]")) button.prepend(icon(button.dataset.icon));
   return {icon, enhance, sync: source => controls.get(source)?.sync(), focus: source => enhance(source).button.focus(), closeMenus: () => active?.close(false)};

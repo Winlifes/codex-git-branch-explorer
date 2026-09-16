@@ -43,7 +43,7 @@ class McpTests(unittest.TestCase):
         init = self.rpc("initialize", protocolVersion="2025-11-25")
         self.assertTrue(all(i["src"].startswith("data:image/svg+xml;base64,") for i in init["serverInfo"]["icons"]))
         tools = self.rpc("tools/list")["tools"]
-        self.assertEqual(tools[0]["title"], "Git 分支")
+        self.assertEqual(tools[0]["title"], "Git")
         self.assertEqual(tools[0]["_meta"]["openai/ui"]["entrypoints"], [{"type": "thread"}])
         self.assertEqual(tools[0]["_meta"]["ui"]["resourceUri"], URI)
         self.assertEqual(tools[1]["_meta"]["ui"]["visibility"], ["app"])
@@ -60,6 +60,22 @@ class McpTests(unittest.TestCase):
         self.assertNotIn('href="./style.css"', resource["text"])
         self.assertIn('ui/initialize', resource["text"])
         self.assertIn('data-host-theme', resource["text"])
+        self.assertNotIn('src="./i18n.js"', resource["text"])
+        self.assertNotIn('src="./locales/en.js"', resource["text"])
+        self.assertIn('git-language-changed', resource["text"])
+
+    def test_host_metadata_follows_the_requested_locale(self):
+        for locale, expected in (("zh-CN", "Git 分支"), ("en-GB", "Git Branches"), ("fr-FR", "Git Branches")):
+            tools = self.rpc("tools/list", _meta={"openai/locale": locale})["tools"]
+            self.assertEqual(tools[0]["title"], expected)
+        # No per-task query changes the process-wide initialization locale.
+        self.assertEqual(self.rpc("tools/list")["tools"][0]["title"], "Git")
+
+    def test_error_translation_keeps_a_message_for_live_switching(self):
+        result = self.rpc("tools/call", name="git_query", arguments={"action": "branches", "repo": 4},
+                          _meta={"openai/locale": "en-US"})
+        self.assertEqual(result["content"][0]["text"], "Incorrect query parameter type: repo")
+        self.assertTrue(result["_meta"]["gitExplorerError"]["_gitMessage"])
 
     def test_initial_result_then_history_and_diff(self):
         first = self.rpc("tools/call", name="git_panel", arguments={})["_meta"]["gitExplorer"]

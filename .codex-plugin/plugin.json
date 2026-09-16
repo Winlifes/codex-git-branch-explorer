@@ -1,8 +1,8 @@
 {
   "name": "git-branch-explorer",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "license": "MIT",
-  "description": "在 Codex 右侧面板浏览 Git 分支与历史，预览确认提交、分支管理和远程操作。",
+  "description": "Browse Git branches and history in the Codex side panel, with previews for commits, branch management and remote operations.",
   "author": {
     "name": "Winlifes",
     "url": "https://github.com/Winlifes"
@@ -10,9 +10,9 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Git 分支浏览器",
-    "shortDescription": "在侧边面板查看 Git 历史并操作仓库",
-    "longDescription": "在 Codex 原生侧边面板入口显示 Git 分支。浏览本地和远程分支、提交历史与差异；通过预览确认暂存、提交、分支切换、创建、合并、撤销、删除已合并分支，以及获取、拉取和推送。跟随 Codex 主题与字体。",
+    "displayName": "Git Branch Explorer",
+    "shortDescription": "Browse Git history and manage repositories in the side panel",
+    "longDescription": "Open a native Codex panel for local and remote branches, commit history and diffs. Preview and confirm staging, commits, branch creation, switching, merging, reverting, deletion of merged branches, fetch, pull and push. Follow the Codex theme, fonts and language, with English and Simplified Chinese UI.",
     "developerName": "Winlifes",
     "category": "Productivity",
     "capabilities": [
@@ -22,9 +22,9 @@
     ],
     "brandColor": "#737373",
     "defaultPrompt": [
-      "在右侧面板查看当前项目的 Git 分支和提交记录",
-      "打开 Git 分支浏览器",
-      "查看某个分支的提交历史和代码改动"
+      "Open the current project's Git branches and commit history in the right panel",
+      "Open Git Branch Explorer",
+      "在右侧面板查看当前项目的 Git 分支和提交记录"
     ],
     "websiteURL": "https://github.com/Winlifes/codex-git-branch-explorer",
     "privacyPolicyURL": "https://github.com/Winlifes/codex-git-branch-explorer/blob/main/PRIVACY.md"

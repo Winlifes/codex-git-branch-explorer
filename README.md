@@ -6,9 +6,9 @@ Browse Git branches, commit history and file diffs in the Codex right panel. Man
 
 [Download](https://github.com/Winlifes/codex-git-branch-explorer/releases/latest) · [Report an issue](https://github.com/Winlifes/codex-git-branch-explorer/issues) · [MIT License](LICENSE)
 
-![Light theme: local and remote branches, commit history, timestamps and line counts](docs/screenshots/history-light.jpg)
+![English UI: local and remote branches, commit history, timestamps and line counts](docs/screenshots/history-light-en.jpg)
 
-*Real captures of v0.2.1 running against the disposable `orbit-notes` demo repository in a local MCP development host. The images show the plugin panel, without the surrounding Codex window. The panel UI is currently Chinese; documentation is available in English and Chinese.*
+*Real captures from the disposable `orbit-notes` repository in a local MCP development host, without the surrounding Codex window. The history screenshots show v0.3.0 in English and Chinese; the other examples show v0.2.1. The panel now follows the Codex language automatically.*
 
 This is an independently developed, third-party plugin distributed through this repository. It is not currently listed in the official OpenAI plugin directory. Installation does not modify the Codex application.
 
@@ -26,6 +26,7 @@ This is an independently developed, third-party plugin distributed through this 
 | Branch operations | Create, switch and merge branches; revert commits with a new reverse commit; delete merged local branches. |
 | Remotes and conflicts | Fetch, pull with fast-forward only, push without force and set an upstream. Stage resolved conflicts, then continue or abort a merge/revert. |
 | Appearance | Follow the Codex theme or select light/dark mode, with themed menus, thin scrollbars and a branch drawer for narrow panels. |
+| Language | Follow the Codex language with English and Simplified Chinese UI, including menus, previews, errors, dates and number formatting. Live changes preserve drafts and selections. |
 
 Selecting a branch changes the history you are browsing; it does not check it out. **Refresh** rereads local Git data; use **Fetch** to update remote-tracking branches.
 
@@ -53,12 +54,20 @@ The installer copies the plugin to `~/plugins/git-branch-explorer`, configures t
 ### Open the panel
 
 1. Open an existing or new Codex task for your Git project.
-2. Open the right panel, click **＋**, then select **Git 分支** (Git Branches).
-3. Select a branch to browse its history. Open **工作区** (Working Tree) to inspect and manage local changes.
+2. Open the right panel, click **＋**, then select **Git**. Hosts that provide a language during tool discovery may label it **Git Branches** or **Git 分支**.
+3. Select a branch to browse its history. Open **Working tree** to inspect and manage local changes.
 
 If the entry is missing after installation, let running tasks finish, quit and reopen Codex, then return to your task. Existing tasks are supported; there is no need to recreate them.
 
-The plugin uses the current task's project directory when available, including its worktree. A new task may not expose that directory before its first message. The panel then displays message/context checks: send a message, close and reopen **Git 分支**, or choose a repository manually. Once the project directory is available, the panel checks it for Git repositories and shows any specific error.
+The plugin uses the current task's project directory when available, including its worktree. A new task may not expose that directory before its first message. The panel then displays message/context checks: send a message, close and reopen the Git panel, or choose a repository manually. Once the project directory is available, the panel checks it for Git repositories and shows any specific error.
+
+### Language
+
+The panel uses the language supplied by Codex. English locales use English UI; Chinese locales use Simplified Chinese UI. Other languages currently fall back to English. If the host does not supply a locale, the panel uses the host's HTML language or the browser language.
+
+When Codex sends a language change, open menus, error messages and confirmation previews update in place. Commit drafts, form values and selections stay intact; switching language does not repeat Git requests. Branch names, commit messages, authors, paths and file contents remain exactly as stored in Git. Dates and numbers follow the selected locale, with times shown in the local time zone.
+
+The native tab label is controlled and may be cached by Codex. After installing an update, close and reopen the Git panel to load its new UI.
 
 ### Existing installations
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-09-16
+
+- Follow the Codex language with English and Simplified Chinese UI, localized dates/numbers, and an English fallback for other languages.
+- Update open menus, previews and errors live while preserving drafts, selections and Git data. Language changes do not repeat Git requests.
+- Localize MCP tool metadata when the host supplies a locale; use the neutral native entry label `Git` otherwise.
+- Add localization regression coverage, bilingual documentation and current English/Chinese runtime screenshots.
+
+- 跟随 Codex 语言切换英文与简体中文，覆盖日期、数字、菜单、预览和错误提示；其他语言回退为英文。
+- 实时切换保留输入、选项与 Git 原始内容，不重复发送 Git 请求。
+- MCP 元数据使用宿主提供的语言；没有语言信息时，原生入口显示通用名称 `Git`。
+- 补充本地化回归验证、中英文文档及新版运行截图。
+
 ## 0.2.1 — 2026-09-15
 
 - 添加 MIT 开源许可证，版权归属 Winlifes。

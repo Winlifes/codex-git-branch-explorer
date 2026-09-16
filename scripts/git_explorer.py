@@ -2,6 +2,8 @@
 """Read-only Git queries and a loopback UI. Python 3.9+, no dependencies."""
 from __future__ import annotations
 
+from i18n import Message, ui, error_message, message_paths, message_spec, translate
+
 import argparse
 import json
 import os
@@ -26,6 +28,7 @@ class GitError(Exception):
     def __init__(self, message, kind=None):
         super().__init__(message)
         self.kind = kind
+        self.ui_message = message if isinstance(message, Message) else None
 
 
 def decode(value):
@@ -38,9 +41,9 @@ def bounded_int(value, default, minimum, maximum):
     try:
         number = int(value)
     except (TypeError, ValueError):
-        raise GitError("分页参数必须是整数。")
+        raise GitError(ui("分页参数必须是整数。"))
     if not minimum <= number <= maximum:
-        raise GitError("参数超出范围。")
+        raise GitError(ui("参数超出范围。"))
     return number
 
 
@@ -48,7 +51,7 @@ class Repository:
     def __init__(self, path):
         self.path = str(Path(path).expanduser().resolve())
         if not Path(self.path).is_dir():
-            raise GitError("仓库目录不存在或无法访问。", "directory_unavailable")
+            raise GitError(ui("仓库目录不存在或无法访问。"), "directory_unavailable")
         self.git("rev-parse", "--git-dir")
         self.bare = self.git("rev-parse", "--is-bare-repository").strip() == b"true"
         root = self.git("rev-parse", "--absolute-git-dir" if self.bare else "--show-toplevel")
@@ -74,7 +77,7 @@ class Repository:
                     if time.monotonic() > deadline:
                         process.kill()
                         process.wait()
-                        raise GitError("Git 查询超时，请缩小查询范围后重试。")
+                        raise GitError(ui("Git 查询超时，请缩小查询范围后重试。"))
                     if os.fstat(out.fileno()).st_size > cap:
                         limited = True
                         process.kill()
@@ -87,31 +90,31 @@ class Repository:
                 if limited:
                     if truncate:
                         return data[:cap], True
-                    raise GitError("查询结果过大，请缩小查询范围。")
+                    raise GitError(ui("查询结果过大，请缩小查询范围。"))
                 if process.returncode:
                     if optional:
                         return b""
                     err.seek(0)
-                    message = decode(err.read(2000)).strip() or "Git 查询失败。"
+                    message = decode(err.read(2000)).strip() or ui("Git 查询失败。")
                     kind = "not_repository" if message.startswith("fatal: not a git repository") else None
                     raise GitError(message, kind)
                 return (data, False) if truncate else data
         except FileNotFoundError:
-            raise GitError("找不到 Git，请先安装 Git 并确保它位于 PATH。", "git_unavailable")
+            raise GitError(ui("找不到 Git，请先安装 Git 并确保它位于 PATH。"), "git_unavailable")
 
     def oid(self, ref):
         # Exact branch names, HEAD and object IDs; never arbitrary rev expressions.
         if not isinstance(ref, str) or len(ref) > 1024 or "\0" in ref:
-            raise GitError("无效的分支或提交。")
+            raise GitError(ui("无效的分支或提交。"))
         if ref != "HEAD" and not re.fullmatch(r"[0-9a-fA-F]{4,64}", ref):
             if not ref.startswith(("refs/heads/", "refs/remotes/")):
-                raise GitError("请选择完整分支引用或提交 SHA。")
+                raise GitError(ui("请选择完整分支引用或提交 SHA。"))
             if not self.git("show-ref", "--verify", "--hash", ref, optional=True):
-                raise GitError("分支不存在，可能已被删除；请刷新分支列表。")
+                raise GitError(ui("分支不存在，可能已被删除；请刷新分支列表。"))
         value = self.git("rev-parse", "--verify", "--end-of-options", ref + "^{commit}")
         result = decode(value).strip()
         if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", result):
-            raise GitError("无法解析提交。")
+            raise GitError(ui("无法解析提交。"))
         return result
 
     def info(self):
@@ -135,7 +138,7 @@ class Repository:
                 continue
             fields = row.split(b"\0")
             if len(fields) != 8:
-                raise GitError("分支元数据格式无法解析。")
+                raise GitError(ui("分支元数据格式无法解析。"))
             ref, sha, date, subject, author, upstream, tracking, symref = map(decode, fields)
             if symref:  # origin/HEAD is an alias, not another branch.
                 continue
@@ -146,7 +149,7 @@ class Repository:
                              "current": ref == info["current_ref"], "unborn": False})
         if info["current_ref"] and not info["head"]:
             branches.insert(0, {"ref": info["current_ref"], "name": info["current_ref"].removeprefix("refs/heads/"),
-                                "sha": None, "date": "", "subject": "尚无提交", "author": "",
+                                "sha": None, "date": "", "subject": ui("尚无提交"), "author": "",
                                 "upstream": "", "tracking": "", "remote": False, "current": True, "unborn": True})
         return {"repository": info, "branches": branches}
 
@@ -156,7 +159,7 @@ class Repository:
         if fields and fields[-1] == b"":
             fields.pop()
         if len(fields) % 8:
-            raise GitError("提交元数据格式无法解析。")
+            raise GitError(ui("提交元数据格式无法解析。"))
         result = []
         for i in range(0, len(fields), 8):
             sha, parents, author, email, date, committed, subject, message = map(decode, fields[i:i+8])
@@ -170,7 +173,7 @@ class Repository:
         offset = bounded_int(offset, 0, 0, 10_000_000)
         for text in (query, author):
             if not isinstance(text, str) or len(text) > 300 or "\0" in text or "\n" in text:
-                raise GitError("搜索词最长 300 个字符，且不能包含换行。")
+                raise GitError(ui("搜索词最长 300 个字符，且不能包含换行。"))
         if ref == "HEAD" and not self.info()["head"]:
             return {"commits": [], "has_more": False, "next_offset": 0, "snapshot": None}
         snapshot = self.oid(ref)
@@ -192,7 +195,7 @@ class Repository:
             # Large or unsupported diffs must not hide the commit history itself.
             for item in page:
                 item["stats"] = None
-                item["stats_error"] = str(error)
+                item["stats_error"] = error_message(error)
         return {"commits": page, "has_more": len(items) > limit,
                 "next_offset": offset + min(len(items), limit), "snapshot": snapshot}
 
@@ -202,7 +205,7 @@ class Repository:
             return {}
         if any(not isinstance(oid, str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid)
                for oid in object_ids):
-            raise GitError("无效的提交统计请求。")
+            raise GitError(ui("无效的提交统计请求。"))
         result = {oid: {"additions": 0, "deletions": 0, "files_changed": 0, "binary_files": 0}
                   for oid in object_ids}
         raw = self.git("show", "--no-walk=unsorted", "--root", "--diff-merges=first-parent",
@@ -219,13 +222,13 @@ class Repository:
             if re.fullmatch(rb"[0-9a-f]{40}|[0-9a-f]{64}", record):
                 oid = record.decode("ascii")
                 if oid not in result or oid in seen:
-                    raise GitError("提交统计记录无法解析。")
+                    raise GitError(ui("提交统计记录无法解析。"))
                 seen.add(oid)
                 current = result[oid]
                 continue
             counts = record.split(b"\t", 2)
             if current is None or len(counts) != 3:
-                raise GitError("提交行数统计无法解析。")
+                raise GitError(ui("提交行数统计无法解析。"))
             added, deleted, _path = counts
             if added == deleted == b"-":
                 current["binary_files"] += 1
@@ -233,10 +236,10 @@ class Repository:
                 current["additions"] += int(added)
                 current["deletions"] += int(deleted)
             else:
-                raise GitError("提交行数统计无法解析。")
+                raise GitError(ui("提交行数统计无法解析。"))
             current["files_changed"] += 1
         if seen != set(object_ids):
-            raise GitError("部分提交的行数统计缺失。")
+            raise GitError(ui("部分提交的行数统计缺失。"))
         return result
 
     def commit(self, sha, parent=0):
@@ -253,7 +256,7 @@ class Repository:
         if fields[-1:] == [b""]:
             fields.pop()
         if len(fields) % 2:
-            raise GitError("文件列表格式无法解析。")
+            raise GitError(ui("文件列表格式无法解析。"))
         item["files"] = [{"status": decode(fields[i]), "path": decode(fields[i+1])}
                          for i in range(0, len(fields), 2)]
         item["parent_index"] = parent
@@ -262,7 +265,7 @@ class Repository:
     def patch(self, sha, path, parent=0):
         item = self.commit(sha, parent)
         if path not in {f["path"] for f in item["files"]}:
-            raise GitError("该文件不在所选提交的变更列表中。")
+            raise GitError(ui("该文件不在所选提交的变更列表中。"))
         literal = ":(top,literal)" + path
         common = ["--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--unified=3"]
         if item["parents"]:
@@ -302,6 +305,10 @@ class Handler(BaseHTTPRequestHandler):
         pass  # Do not expose session URLs in access logs.
 
     def send(self, status, value, kind="application/json; charset=utf-8"):
+        if kind.startswith("application/json") and isinstance(value, dict):
+            messages = message_paths(value)
+            if messages:
+                value = {**value, "_gitMessages": messages}
         data = json.dumps(value, ensure_ascii=False).encode("utf-8") if kind.startswith("application/json") else value
         self.send_response(status)
         self.send_header("Content-Type", kind)
@@ -318,14 +325,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def allowed_path(self):
         if self.headers.get("Host") != urlsplit(self.server.origin).netloc:
-            self.send(403, {"error": "无效的请求来源。"})
+            self.send(403, {"error": ui("无效的请求来源。")})
             return None
         if self.headers.get("Origin") not in (None, self.server.origin):
-            self.send(403, {"error": "不接受跨站请求。"})
+            self.send(403, {"error": ui("不接受跨站请求。")})
             return None
         parsed = urlsplit(self.path)
         if not parsed.path.startswith(self.server.prefix):
-            self.send(404, {"error": "浏览会话不存在，请从 Codex 重新打开。"})
+            self.send(404, {"error": ui("浏览会话不存在，请从 Codex 重新打开。")})
             return None
         self.server.last_request = time.monotonic()
         return parsed
@@ -338,7 +345,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200, {"stopped": True})
             threading.Thread(target=self.server.shutdown, daemon=True).start()
         else:
-            self.send(405, {"error": "此浏览器只提供读取操作。"})
+            self.send(405, {"error": ui("此浏览器只提供读取操作。")})
 
     def do_GET(self):
         parsed = self.allowed_path()
@@ -349,13 +356,18 @@ class Handler(BaseHTTPRequestHandler):
                   "app.js": ("app.js", "text/javascript; charset=utf-8"),
                   "operations.js": ("operations.js", "text/javascript; charset=utf-8"),
                   "controls.js": ("controls.js", "text/javascript; charset=utf-8"),
+                  "i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
+                  "locales/en.js": ("locales/en.json", "text/javascript; charset=utf-8"),
                   "style.css": ("style.css", "text/css; charset=utf-8")}
         if path in assets:
             name, kind = assets[path]
-            self.send(200, (ROOT / "assets" / name).read_bytes(), kind)
+            data = (ROOT / "assets" / name).read_bytes()
+            if name == "locales/en.json":
+                data = b"window.GitEnglish = " + data + b";"
+            self.send(200, data, kind)
             return
         if not self.server.slots.acquire(blocking=False):
-            self.send(429, {"error": "查询繁忙，请稍后重试。"})
+            self.send(429, {"error": ui("查询繁忙，请稍后重试。")})
             return
         try:
             params = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=20)
@@ -372,13 +384,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "api/patch":
                 value = repo.patch(get("sha"), get("path"), get("parent", "0"))
             else:
-                self.send(404, {"error": "接口不存在。"})
+                self.send(404, {"error": ui("接口不存在。")})
                 return
             self.send(200, value)
         except (GitError, ValueError) as error:
-            self.send(400, {"error": str(error)})
+            self.send(400, {"error": error_message(error)})
         except Exception:
-            self.send(500, {"error": "读取失败，请从 Codex 重新打开浏览器。"})
+            self.send(500, {"error": ui("读取失败，请从 Codex 重新打开浏览器。")})
         finally:
             self.server.slots.release()
 
@@ -421,11 +433,11 @@ def start(args):
                 print(json.dumps(result, ensure_ascii=False), flush=True)
                 return
             if child.poll() is not None:
-                raise GitError("后台服务启动失败。可使用 serve 命令查看错误。")
+                raise GitError(ui("后台服务启动失败。可使用 serve 命令查看错误。"))
             time.sleep(0.05)
         child.terminate()
         child.wait(timeout=5)
-        raise GitError("浏览器启动超时。")
+        raise GitError(ui("浏览器启动超时。"))
 
 
 def main():
@@ -468,9 +480,9 @@ def main():
         if args.command == "serve" and args.ready_file:
             target = Path(args.ready_file)
             temp = target.with_suffix(".tmp")
-            temp.write_text(json.dumps({"error": str(error)}), encoding="utf-8")
+            temp.write_text(json.dumps({"error": error_message(error)}), encoding="utf-8")
             temp.replace(target)
-        print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps({"error": error_message(error)}, ensure_ascii=False), file=sys.stderr)
         raise SystemExit(1)
 
 

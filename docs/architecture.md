@@ -1,6 +1,6 @@
 # Git 分支浏览器
 
-在 Codex **右侧面板的新标签页入口列表**中加入 **Git 分支**，与文件、侧边聊天、浏览器、终端并列。点击后打开专属 Git 标签页，浏览真实仓库的分支、提交记录和逐文件差异。
+在 Codex **右侧面板的新标签页入口列表**中加入 **Git**，与文件、侧边聊天、浏览器、终端并列。宿主在工具发现时提供语言信息的情况下，入口显示 **Git 分支**或 **Git Branches**。点击后打开专属 Git 标签页，浏览真实仓库的分支、提交记录和逐文件差异。
 
 入口由 Codex 原生组件绘制。面板内容使用 MCP Apps，自动接收 Codex 的字体、颜色和主题变化；采用紧凑列表、细分隔线和窄面板布局。
 
@@ -14,7 +14,7 @@
 
 安装器复制到个人 plugins/git-branch-explorer 目录，解析 MCP 启动路径和本机 Codex 数据目录，注册个人插件市场，然后运行 codex plugin add。保留其他插件和已有目录。请使用安装器，让当前客户端正确解析本机路径。无需 npm、第三方 Python 依赖、API Key 或云端服务。
 
-在 Git 项目的现有任务或新任务中，打开右侧面板并点击新标签页按钮，在入口列表选择 **Git 分支**。不需要先发送一条让 Codex 打开插件的消息。
+在 Git 项目的现有任务或新任务中，打开右侧面板并点击新标签页按钮，在入口列表选择 **Git**。不需要先发送一条让 Codex 打开插件的消息。
 
 安装或更新后，如果已有窗口的入口列表尚未出现该项，先等正在运行的任务结束，再退出并重新打开 Codex，回到原任务查看。这样可重新加载已安装插件；不需要重建任务或迁移历史记录。当前插件没有用于强制刷新宿主入口列表的接口。
 
@@ -70,9 +70,9 @@
 
 ```json
 {
-  "title": "Git 分支",
+  "title": "Git",
   "_meta": {
-    "ui": { "resourceUri": "ui://git-branch-explorer/panel.html" },
+    "ui": { "resourceUri": "ui://git-branch-explorer/v0.3/panel.html" },
     "openai/ui": { "entrypoints": [{ "type": "thread" }] }
   }
 }
@@ -85,6 +85,18 @@ MCP UI 的公开基础协议见 [OpenAI 插件 UI 文档](https://developers.ope
 项目定位使用 Codex 在工具调用 `_meta` 中传入的 `threadId` / `thread_id`。`scripts/project_context.py` 只读查询本机 Codex 的任务工作目录，以及桌面端保存的任务与项目关联；这些本地元数据格式已按开发时客户端核对，不是稳定的公开插件 API。格式变化或无对应记录时显示手动选择，不猜测当前项目。独立 MCP 客户端没有传任务 ID 时，才使用进程工作目录。
 
 当前核对的客户端只为内置面板命令提供快捷键注册与入口按键标识，MCP thread entrypoint 没有对应扩展字段。因此此插件尚未提供用于打开面板的应用级快捷键；在标题中写快捷键文字不会产生真实按键绑定。完整支持需要客户端扩展命令注册和入口渲染。
+
+## 语言同步
+
+`assets/i18n.js` 接收 `ui/initialize` 中的 `hostContext.locale`，并响应 `ui/notifications/host-context-changed` 的语言变化。兼容宿主映射到 `document.documentElement.lang` 的语言；没有宿主信息时，使用浏览器语言。英文语言区域显示英文，中文语言区域显示简体中文，其他语言暂时回退为英文。
+
+英文文案集中在 `assets/locales/en.json`，中文源文案作为翻译键。面板只绑定明确标记的界面文字和属性，语言变化时更新原节点，不重建输入控件或操作预览。日期和数字使用当前语言区域的 `Intl` 格式。提交草稿、搜索条件、表单选项和确认凭据保持不变，不因切换语言重新发起 Git 请求。
+
+后端通过 `scripts/i18n.py` 为提示、错误和操作预览保留消息键及参数，以 MCP 结果中的 `gitExplorerMessages` / `gitExplorerError` 元数据传给面板。Git 分支名、作者、提交信息、路径和 diff 属于数据，原样显示；不把它们当作翻译键。独立 HTTP 调试模式使用相同的文案目录和消息标记。
+
+工具元数据使用宿主传入的 `_meta["openai/locale"]`，兼容旧字段 `webplus/i18n`。如果工具发现阶段没有提供语言，原生入口使用通用名称 `Git`；标签标题由宿主绘制和缓存，面板无法强制改名。界面资源 URI 包含版本边界，便于更新后重新加载。
+
+宿主 HTML 语言约定见 [OpenAI Widget localization](https://developers.openai.com/plugins/build/chatgpt-ui)，调用方语言元数据见 [OpenAI 插件参考](https://developers.openai.com/plugins/reference)。Codex 的 `hostContext.locale` 接入已按本机客户端代码核对，没有修改客户端文件。
 
 ## 数据与运行
 
@@ -105,5 +117,7 @@ MCP UI 的公开基础协议见 [OpenAI 插件 UI 文档](https://developers.ope
 测试覆盖真实 Git 仓库、分页、搜索、差异、特殊文件名、合并、空仓库、worktree、裸仓库、读取前后的仓库一致性、HTTP 会话、MCP stdio、原生入口元数据、资源读取及安装器隔离验证。项目定位回归覆盖后台目录为 `/`、多个任务交替调用、首次打开、新旧项目路径、worktree 优先级、多仓库选择、上下文缺失后的刷新和异常元数据。
 
 写操作测试全部在临时仓库和本机裸远程中进行，覆盖暂存与取消暂存、部分暂存提交、用户配置与钩子、首次提交、切换 / 创建 / 删除、冲突继续与中止、撤销、推送 / 获取 / 拉取、远程分叉、确认过期、重复确认和预览后状态变化。
+
+本地化回归覆盖文案完整性、Git 内容保持原文、错误脱敏、MCP 语言元数据和错误消息标记；开发宿主中的浏览器验证覆盖初始化、实时中英文切换、英式日期、未支持语言回退、HTML 语言兼容、草稿保留及菜单、预览、错误的即时更新。
 
 修改已安装插件后使用 Codex plugin-creator 的 cachebuster 和重新安装流程。已有任务仍可使用；若窗口保留了旧工具目录，按上面的方式重新加载 Codex 后回到原任务。安装器不会覆盖已有源码目录。

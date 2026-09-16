@@ -1,6 +1,6 @@
 # OpenAI submission preparation
 
-Status: distribution through this Git repository. No OpenAI approval or official directory listing is claimed. Last updated: 2026-09-15.
+Status: distribution through this Git repository. No OpenAI approval or official directory listing is claimed. Last updated: 2026-09-16.
 
 ## Plugin
 
@@ -32,6 +32,7 @@ The current implementation exposes an MCP thread entrypoint. It also reads local
 - `git_panel`, `git_query` and `git_prepare` are marked read-only; `git_apply` is marked writable, potentially destructive and open-world.
 - Writes require a short-lived preview token bound to the repository and calling task. The implementation rechecks repository state before applying it.
 - Discard preserves staged contents and creates persistent local file backups before changing the working tree.
+- The panel follows the host locale with English and Simplified Chinese UI, falling back to English for other languages. Locale changes preserve inputs and operation previews; Git names, messages and file contents are never translated.
 
 ## Reviewer scenarios
 
@@ -44,6 +45,7 @@ Use disposable repositories only. The full suite can be run from the plugin root
 | P3 | Prepare modified, deleted and untracked files; confirm single/all discard | Backups precede writes; staged contents survive; unselected files survive a single discard | `test_worktree_discard.py` |
 | P4 | Create/switch branches, merge, revert a commit and delete a merged branch | Each mutation has its own preview; revert preserves history | `test_create_switch_and_safe_delete`, `test_revert_preserves_history`, merge tests |
 | P5 | Use a temporary local bare remote with two clones; push, fetch and pull | Correct remote tracking and fast-forward behavior | `test_push_fetch_and_fast_forward_pull` |
+| P6 | Change the host locale while a draft, menu, preview or error is visible | UI and date formatting update; inputs, preview state and Git content remain intact; no repeated Git requests | `test_i18n.py`, MCP locale tests and browser validation in a local development host |
 | N1 | Change a file after preview, expire a token, or use a different task's token | Apply is rejected without changing the repository | `test_stale_preview_same_status_code_and_cross_task_are_rejected`, `test_expired_and_wrong_repo_tokens_are_rejected` |
 | N2 | Try deleting the current, unmerged or another worktree's checked-out branch | Branch is retained and a reason is shown | `test_unmerged_current_and_checked_out_branch_not_deleted` |
 | N3 | Open a task with missing project metadata or a non-Git directory | Explain the missing context or repository and offer manual selection; never choose another task's project | `test_project_context.py` |

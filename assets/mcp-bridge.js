@@ -9,14 +9,14 @@ window.GitHost = (() => {
     window.parent.postMessage({jsonrpc: "2.0", method, params}, hostOrigin);
   }
   function request(method, params = {}, signal) {
-    if (signal?.aborted) return Promise.reject(new DOMException("已取消", "AbortError"));
+    if (signal?.aborted) return Promise.reject(new DOMException(GitI18n.t("已取消"), "AbortError"));
     return new Promise((resolve, reject) => {
       const id = "git-" + (++nextId);
       const finish = (fn, value) => {
         pending.delete(id); clearTimeout(timer); signal?.removeEventListener("abort", abort); fn(value);
       };
-      const abort = () => finish(reject, new DOMException("已取消", "AbortError"));
-      const timer = setTimeout(() => finish(reject, new Error("Codex 响应超时，请重试。")), 90000);
+      const abort = () => finish(reject, new DOMException(GitI18n.t("已取消"), "AbortError"));
+      const timer = setTimeout(() => finish(reject, GitI18n.error(() => GitI18n.t("Codex 响应超时，请重试。"))), 90000);
       pending.set(id, {resolve: value => finish(resolve, value), reject: err => finish(reject, err)});
       signal?.addEventListener("abort", abort, {once: true});
       window.parent.postMessage({jsonrpc: "2.0", id, method, params}, hostOrigin);
@@ -27,10 +27,10 @@ window.GitHost = (() => {
     document.dispatchEvent(new CustomEvent("git-host-context", {detail: context}));
   }
   function unpack(result) {
-    if (result?.isError) throw new Error(result.content?.find(c => c.type === "text")?.text || "Git 查询失败。");
+    if (result?.isError) throw GitI18n.error(() => result._meta?.gitExplorerError || result.content?.find(c => c.type === "text")?.text || GitI18n.t("Git 查询失败。"));
     const data = result?._meta?.gitExplorer || result?.structuredContent;
-    if (!data || typeof data !== "object") throw new Error("Codex 返回的数据格式无效。");
-    return data;
+    if (!data || typeof data !== "object") throw GitI18n.error(() => GitI18n.t("Codex 返回的数据格式无效。"));
+    return GitI18n.hydrate(data, result?._meta?.gitExplorerMessages);
   }
   window.addEventListener("message", event => {
     if (event.source !== window.parent) return;
@@ -41,16 +41,16 @@ window.GitHost = (() => {
     if (event.origin && event.origin !== "null") hostOrigin = event.origin;
     if (message.id !== undefined && !message.method) {
       const call = pending.get(message.id);
-      if (message.error) call?.reject(new Error(message.error.message || "Codex 请求失败。"));
+      if (message.error) call?.reject(GitI18n.error(() => message.error.message || GitI18n.t("Codex 请求失败。")));
       else call?.resolve(message.result);
     } else if (message.method === "ui/notifications/tool-result") initialResolve(message.params);
     else if (message.method === "ui/notifications/host-context-changed") updateContext(message.params || {});
     else if (message.method === "ui/resource-teardown") {
-      for (const call of [...pending.values()]) call.reject(new DOMException("面板已关闭", "AbortError"));
+      for (const call of [...pending.values()]) call.reject(new DOMException(GitI18n.t("面板已关闭"), "AbortError"));
       window.parent.postMessage({jsonrpc: "2.0", id: message.id, result: {}}, hostOrigin);
     }
   });
-  const ready = request("ui/initialize", {appInfo: {name: "git-branch-explorer", version: "0.2.1"},
+  const ready = request("ui/initialize", {appInfo: {name: "git-branch-explorer", version: "0.3.0"},
     appCapabilities: {}, protocolVersion: "2026-01-26"}).then(result => {
       updateContext(result.hostContext || {});
       notify("ui/notifications/initialized");
@@ -59,9 +59,9 @@ window.GitHost = (() => {
   return {ready, initial, context, unpack, request,
     async operation(name, args) {
       // Unlike queries, mutations are never cancelled or automatically retried.
-      return unpack(await request("tools/call", {name, arguments: args}));
+      return unpack(await request("tools/call", {name, arguments: args, _meta: {"openai/locale": GitI18n.locale}}));
     },
     async query(action, args, signal) {
-      return unpack(await request("tools/call", {name: "git_query", arguments: {action, ...args}}, signal));
+      return unpack(await request("tools/call", {name: "git_query", arguments: {action, ...args}, _meta: {"openai/locale": GitI18n.locale}}, signal));
     }};
 })();
