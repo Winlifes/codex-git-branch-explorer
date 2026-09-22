@@ -6,9 +6,9 @@ Browse Git branches, commit history and file diffs in the Codex right panel. Man
 
 [Download](https://github.com/Winlifes/codex-git-branch-explorer/releases/latest) · [Report an issue](https://github.com/Winlifes/codex-git-branch-explorer/issues) · [MIT License](LICENSE)
 
-![English UI: local and remote branches, commit history, timestamps and line counts](docs/screenshots/history-light-en.jpg)
+![English UI: branch folders, current branch and commit history](docs/screenshots/branch-folders-en.jpg)
 
-*Real captures from the disposable `orbit-notes` repository in a local MCP development host, without the surrounding Codex window. The history screenshots show v0.3.0 in English and Chinese; the other examples show v0.2.1. The panel now follows the Codex language automatically.*
+*Real captures from the disposable `orbit-notes` repository in a local MCP development host, without the surrounding Codex window. The branch folder screenshots show v0.4.0 in English and Chinese; the other examples below show v0.2.1. The panel follows the Codex language automatically.*
 
 This is an independently developed, third-party plugin distributed through this repository. It is not currently listed in the official OpenAI plugin directory. Installation does not modify the Codex application.
 
@@ -18,7 +18,7 @@ This is an independently developed, third-party plugin distributed through this 
 
 | Area | What you can do |
 | --- | --- |
-| Branches | Browse local and remote-tracking branches, identify the current branch and see upstream ahead/behind status. |
+| Branches | Browse local and remote-tracking branches in collapsible folders, search full branch paths, identify the current branch and see upstream ahead/behind status. |
 | History | Browse each branch's commits with pagination, search by message or author, and filter to the first-parent history. |
 | Commit details | See the full message, author, SHA, date and time, added/deleted line counts, changed files and per-file diffs. Choose a parent for merge commit diffs. |
 | Working tree | Inspect staged and unstaged changes; stage or unstage one file or all files; commit the staged changes. |
@@ -29,6 +29,15 @@ This is an independently developed, third-party plugin distributed through this 
 | Language | Follow the Codex language with English and Simplified Chinese UI, including menus, previews, errors, dates and number formatting. Live changes preserve drafts and selections. |
 
 Selecting a branch changes the history you are browsing; it does not check it out. **Refresh** rereads local Git data; use **Fetch** to update remote-tracking branches.
+
+### Branch folders
+
+Branch names are grouped by `/`: `codex/card-collection` appears inside **codex**, and `codex/fixes/scrollbars` appears inside **codex → fixes**. Remote-tracking branches are grouped under their remote, such as **origin**. Names without `/` stay at the group root.
+
+- Click a folder to expand or collapse it. Counts include all branches below it; a dot marks folders containing the current branch.
+- Expansion is remembered separately for each repository when local storage is available. On first opening, the current branch's path is expanded.
+- Search matches the full branch name and temporarily expands matching paths. Clearing the search restores your previous folder state.
+- Use **↑/↓** to move, **→/←** to expand or collapse and move between levels, **Home/End** to jump, and **Enter/Space** to open a folder or browse a branch. Hover a branch to see its full name.
 
 ## Install
 
@@ -130,10 +139,11 @@ Run the test suite and build a portable release archive:
 
 ```sh
 python3 -m unittest discover -s tests -v
+node --test tests/branch-tree.test.cjs
 python3 scripts/build_release.py
 ```
 
-Write-operation tests use disposable repositories and local bare remotes. The build creates a ZIP and SHA-256 checksum in `dist/`, including both READMEs and the screenshots. Git history and local installation configuration are excluded.
+Node.js 18+ is needed only for the branch tree tests, not to run the plugin. These tests cover folder grouping, ref identity, search and per-repository expansion preferences. Write-operation tests use disposable repositories and local bare remotes. The build creates a ZIP and SHA-256 checksum in `dist/`, including both READMEs and the screenshots. Git history and local installation configuration are excluded.
 
 A standalone, read-only browser mode is also available for debugging:
 

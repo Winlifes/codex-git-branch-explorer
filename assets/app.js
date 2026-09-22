@@ -7,6 +7,10 @@ const state = {branches: [], repository: null, branch: null, kind: "all",
 const controllers = new Map();
 const nativeHost = window.GitHost;
 let selectedRepository = "";
+let folderStorage;
+try { folderStorage = localStorage; } catch {}
+const branchExpansion = new GitBranchTree.Expansion(folderStorage);
+let branchRows = [], branchFocusId = "";
 try { $("theme").value = localStorage.getItem("git-explorer-theme") || "auto"; } catch {}
 function setTheme() {
   const theme = $("theme").value;
@@ -88,33 +92,126 @@ function closeBranches() {
 }
 function renderBranches() {
   const target = $("branches");
+  const hadFocus = target.contains(document.activeElement), scrollTop = target.scrollTop;
+  const previousId = hadFocus ? document.activeElement.dataset.treeId : branchFocusId;
   target.replaceChildren();
   const q = $("branch-search").value.trim().toLocaleLowerCase();
-  const branches = state.branches.filter(b => b.name.toLocaleLowerCase().includes(q) &&
-    (state.kind === "all" || (state.kind === "remote") === b.remote));
-  for (const [remote, title] of [[false, "本地分支"], [true, "远程分支"]]) {
-    const group = branches.filter(b => b.remote === remote);
-    if (!group.length) continue;
-    target.append(el("div", "branch-group", () => GitI18n.t(title) + " · " + group.length));
-    for (const b of group) {
-      const selected = state.branch?.ref === b.ref;
-      const button = el("button", "branch" + (selected ? " selected" : ""));
-      button.setAttribute("aria-current", selected ? "true" : "false");
-      GitI18n.attr(button, "title", () => (b.detached ? GitI18n.t("游离 HEAD") : b.name) + (b.subject ? "\n" + GitI18n.format(b.subject) : ""));
-      const top = el("span", "branch-top");
-      const branchIcon = el("span", "branch-icon");
-      branchIcon.append(window.GitUI.icon(b.detached ? "detached" : "branch"));
-      top.append(branchIcon, el("span", "branch-name", () => b.detached ? GitI18n.t("游离 HEAD") : b.name));
-      if (b.current) top.append(el("span", "badge current", () => GitI18n.t("当前")));
-      button.append(top);
-      const tracking = () => b.tracking.replace("[ahead ", GitI18n.t("领先 ")).replace(", behind ", GitI18n.t(" · 落后 ")).replace("[behind ", GitI18n.t("落后 ")).replace("[gone]", GitI18n.t("上游已删除")).replace("]", "");
-      button.append(el("span", "branch-meta", () => [date(b.date), b.sha?.slice(0, 7), tracking()].filter(Boolean).join(" · ") || GitI18n.t("尚无提交")));
-      button.addEventListener("click", () => selectBranch(b));
-      target.append(button);
+  branchExpansion.use(selectedRepository, state.branch);
+  branchExpansion.filter(q);
+  const tree = GitBranchTree.build(state.branches, q, state.kind);
+  branchRows = [];
+  function render(nodes, container, depth = 0, parentId = "") {
+    nodes.forEach((node, index) => {
+      const folder = node.type === "folder", b = node.branch;
+      const item = el(folder ? "div" : "button", folder ? "branch-folder" + (node.root ? " branch-root" : "") :
+        "branch" + (state.branch?.ref === b.ref ? " selected" : ""));
+      item.setAttribute("role", "treeitem");
+      item.setAttribute("aria-level", String(depth + 1));
+      item.setAttribute("aria-posinset", String(index + 1));
+      item.setAttribute("aria-setsize", String(nodes.length));
+      item.dataset.treeId = node.id;
+      item.style.setProperty("--tree-indent", Math.min(depth, 6) * 12 + "px");
+      item.tabIndex = -1;
+      const entry = {item, node, parentId};
+      branchRows.push(entry);
+      item.addEventListener("focus", () => setBranchFocus(entry, false));
+      container.append(item);
+      if (folder) {
+        const open = branchExpansion.expanded(node);
+        const name = () => node.root ? GitI18n.t(node.group === "local" ? "本地分支" : "远程分支") : node.name;
+        item.setAttribute("aria-expanded", String(open));
+        GitI18n.attr(item, "aria-label", () => GitI18n.t("{name}，{count} 个分支", {name: name(), count: node.count}) +
+          (node.current ? GitI18n.t("，包含当前分支") : ""));
+        const row = el("div", "branch-folder-row");
+        GitI18n.attr(row, "title", () => node.root ? name() : node.path);
+        row.append(window.GitUI.icon("chevron", "ui-icon branch-folder-chevron"), window.GitUI.icon("folder"),
+          el("span", "branch-folder-name", name));
+        if (node.current && !node.root) {
+          const marker = el("span", "branch-folder-current");
+          marker.setAttribute("aria-hidden", "true");
+          GitI18n.attr(marker, "title", () => GitI18n.t("包含当前分支"));
+          row.append(marker);
+        }
+        row.append(el("span", "branch-folder-count", () => node.count.toLocaleString(GitI18n.locale)));
+        item.append(row);
+        row.addEventListener("click", () => {
+          setBranchFocus(entry);
+          branchExpansion.set(node, !open); renderBranches();
+        });
+        if (open) {
+          const children = el("div", "branch-children");
+          children.setAttribute("role", "group"); item.append(children);
+          render(node.children, children, depth + 1, node.id);
+        }
+      } else {
+        item.type = "button";
+        item.setAttribute("aria-selected", String(state.branch?.ref === b.ref));
+        if (b.current) item.setAttribute("aria-current", "true");
+        GitI18n.attr(item, "title", () => (b.detached ? GitI18n.t("游离 HEAD") : b.name) + (b.subject ? "\n" + GitI18n.format(b.subject) : ""));
+        GitI18n.attr(item, "aria-label", () => (b.detached ? GitI18n.t("游离 HEAD") : b.name) +
+          (b.current ? GitI18n.t(" · 当前工作区") : ""));
+        const top = el("span", "branch-top"), branchIcon = el("span", "branch-icon");
+        branchIcon.append(window.GitUI.icon(b.detached ? "detached" : "branch"));
+        top.append(branchIcon, el("span", "branch-name", () => b.detached ? GitI18n.t("游离 HEAD") : node.name));
+        if (b.current) top.append(el("span", "badge current", () => GitI18n.t("当前")));
+        item.append(top);
+        const tracking = () => b.tracking.replace("[ahead ", GitI18n.t("领先 ")).replace(", behind ", GitI18n.t(" · 落后 ")).replace("[behind ", GitI18n.t("落后 ")).replace("[gone]", GitI18n.t("上游已删除")).replace("]", "");
+        item.append(el("span", "branch-meta", () => [date(b.date), b.sha?.slice(0, 7), tracking()].filter(Boolean).join(" · ") || GitI18n.t("尚无提交")));
+        item.addEventListener("click", () => { setBranchFocus(entry); selectBranch(b); });
+      }
+    });
+  }
+  render(tree, target);
+  const focus = branchRows.find(row => row.node.id === previousId) ||
+    branchRows.find(row => row.node.branch?.ref === state.branch?.ref) || branchRows[0];
+  if (focus) {
+    setBranchFocus(focus, false);
+    if (hadFocus) {
+      if ($("sidebar").inert) $("toggle-branches").focus();
+      else focus.item.focus({preventScroll: true});
     }
   }
-  if (!branches.length) empty(target, () => GitI18n.t("没有匹配的分支"), () => GitI18n.t("试试其他名称或分支类型"), true);
+  target.scrollTop = scrollTop;
+  if (!tree.length) empty(target, () => GitI18n.t("没有匹配的分支"), () => GitI18n.t("试试其他名称或分支类型"), true);
 }
+function setBranchFocus(entry, focus = true) {
+  branchFocusId = entry.node.id;
+  for (const row of branchRows) row.item.tabIndex = row === entry ? 0 : -1;
+  if (focus) entry.item.focus({preventScroll: true});
+}
+$("branches").addEventListener("keydown", event => {
+  if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const item = event.target.closest('[role="treeitem"]');
+  const index = branchRows.findIndex(row => row.item === item), row = branchRows[index];
+  if (!row) return;
+  const folder = row.node.type === "folder", open = folder && branchExpansion.expanded(row.node);
+  let destination;
+  const toggle = expanded => { branchExpansion.set(row.node, expanded); renderBranches(); };
+  switch (event.key) {
+    case "ArrowDown": destination = branchRows[Math.min(index + 1, branchRows.length - 1)]; break;
+    case "ArrowUp": destination = branchRows[Math.max(index - 1, 0)]; break;
+    case "Home": destination = branchRows[0]; break;
+    case "End": destination = branchRows[branchRows.length - 1]; break;
+    case "ArrowRight":
+      if (folder && !open) toggle(true);
+      else if (folder) destination = branchRows[index + 1];
+      break;
+    case "ArrowLeft":
+      if (open) toggle(false);
+      else destination = branchRows.find(candidate => candidate.node.id === row.parentId);
+      break;
+    case "Enter": case " ":
+      if (folder) toggle(!open); else item.click();
+      break;
+    default: return;
+  }
+  event.preventDefault();
+  if (destination) {
+    setBranchFocus(destination);
+    const visibleRow = destination.node.type === "folder" ? destination.item.firstElementChild : destination.item;
+    visibleRow.scrollIntoView({block: "nearest"});
+  }
+});
 async function refresh(initialData = null) {
   const version = ++state.branchesVersion;
   $("refresh").disabled = true;
@@ -126,6 +223,7 @@ async function refresh(initialData = null) {
       showRepositoryPicker(data);
       return;
     }
+    const changedRepository = selectedRepository !== data.repository.path;
     state.repository = data.repository;
     selectedRepository = data.repository.path;
     $("repo-input").value = selectedRepository;
@@ -145,13 +243,15 @@ async function refresh(initialData = null) {
     if (repo.bare) notes.push("当前打开的是裸仓库。");
     GitI18n.text($("notice"), () => notes.map(key => GitI18n.t(key)).join(" "));
     $("notice").hidden = !notes.length;
-    const selected = state.branches.find(b => b.ref === state.branch?.ref) ||
+    const selected = (!changedRepository && state.branches.find(b => b.ref === state.branch?.ref)) ||
       state.branches.find(b => b.current) || state.branches[0];
-    renderBranches();
-    if (selected) selectBranch(selected);
+    branchExpansion.use(repo.path, selected);
+    if (changedRepository) branchFocusId = "";
+    if (selected) selectBranch(selected, {reveal: !changedRepository && state.branch?.ref !== selected.ref});
     else {
       closeDetail();
       state.branch = null;
+      renderBranches();
       state.historyVersion++;
       controllers.get("commits")?.abort();
       $("load-more").hidden = true;
@@ -163,8 +263,9 @@ async function refresh(initialData = null) {
   } catch (err) { error(err); }
   finally { if (version === state.branchesVersion) $("refresh").disabled = false; }
 }
-function selectBranch(branch) {
+function selectBranch(branch, {reveal = true} = {}) {
   state.branch = branch;
+  if (reveal) branchExpansion.reveal(branch);
   closeBranches();
   closeDetail();
   renderBranches();
@@ -372,6 +473,8 @@ async function selectFile(path) {
 $("branch-search").addEventListener("input", renderBranches);
 document.querySelectorAll("[data-kind]").forEach(button => button.addEventListener("click", () => {
   state.kind = button.dataset.kind;
+  branchExpansion.use(selectedRepository, state.branch);
+  if (state.kind !== "all") branchExpansion.set({id: GitBranchTree.folderId(state.kind)}, true);
   document.querySelectorAll("[data-kind]").forEach(b => {
     b.classList.toggle("active", b === button);
     b.setAttribute("aria-pressed", b === button ? "true" : "false");

@@ -392,5 +392,8 @@
   "{count} 个文件": "Files: {count}",
   "{action}远程分支": "{action} remote branches",
   "{action} {count} 个文件": "{action} files ({count})",
-  "撤回 {count} 个文件的工作区改动": "Discard unstaged changes ({count})"
+  "撤回 {count} 个文件的工作区改动": "Discard unstaged changes ({count})",
+  "{name}，{count} 个分支": "{name}, branches: {count}",
+  "，包含当前分支": ", contains the current branch",
+  "包含当前分支": "Contains the current branch"
 }

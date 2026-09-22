@@ -9,6 +9,7 @@
   <script src="./locales/en.js" defer></script>
   <script src="./i18n.js" defer></script>
   <script src="./controls.js" defer></script>
+  <script src="./branch-tree.js" defer></script>
   <script src="./app.js" defer></script>
   <script src="./operations.js" defer></script>
 </head>
@@ -50,7 +51,7 @@
         <button data-kind="local" aria-pressed="false">本地</button>
         <button data-kind="remote" aria-pressed="false">远程</button>
       </div>
-      <nav id="branches" aria-label="选择分支"></nav>
+      <div id="branches" role="tree" aria-label="选择分支"></div>
       <div class="side-footer"><span class="tiny-dot"></span>远程分支为最近 fetch 的本地记录</div>
     </aside>
     <section class="history" aria-labelledby="branch-title">

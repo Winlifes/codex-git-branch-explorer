@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-09-22
+
+- Group local and remote branches into collapsible folders by `/`, preserving full refs for history and operations.
+- Remember expansion per repository; automatically expand matching paths while searching and restore the previous state afterward.
+- Add folder counts, a current-branch indicator, keyboard tree navigation and more room for branch names, using the existing Codex theme and localization.
+- Add branch tree regression tests and current English/Chinese runtime screenshots.
+
+- 按 `/` 将本地与远程分支组织为可折叠文件夹，历史浏览和操作保留完整引用。
+- 按仓库记住展开状态，搜索时自动展开匹配路径，清空后恢复。
+- 添加目录分支数量、当前分支标记、键盘导航，增加分支名显示空间，沿用 Codex 主题和语言同步。
+- 补充分支树回归测试与中英文运行截图。
+
 ## 0.3.0 — 2026-09-16
 
 - Follow the Codex language with English and Simplified Chinese UI, localized dates/numbers, and an English fallback for other languages.

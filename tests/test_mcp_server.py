@@ -61,6 +61,8 @@ class McpTests(unittest.TestCase):
         self.assertIn('ui/initialize', resource["text"])
         self.assertIn('data-host-theme', resource["text"])
         self.assertNotIn('src="./i18n.js"', resource["text"])
+        self.assertNotIn('src="./branch-tree.js"', resource["text"])
+        self.assertIn('const GitBranchTree =', resource["text"])
         self.assertNotIn('src="./locales/en.js"', resource["text"])
         self.assertIn('git-language-changed', resource["text"])
 

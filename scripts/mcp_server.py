@@ -16,9 +16,9 @@ from git_operations import ACTIONS, Operations, status, working_patch
 from project_context import ProjectContext
 
 ROOT = Path(__file__).resolve().parents[1]
-URI = "ui://git-branch-explorer/v0.3/panel.html"
+URI = "ui://git-branch-explorer/v0.4/panel.html"
 MIME = "text/html;profile=mcp-app"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False,
                "idempotentHint": True, "openWorldHint": False}
 REPO_PROPERTY = {"type": "string", "description": ui("本地 Git 仓库的绝对路径；省略时自动读取当前 Codex 任务的项目目录。")}
@@ -81,10 +81,11 @@ def panel_html():
     html = html.replace('<script src="./app.js" defer></script>', "")
     html = html.replace('<script src="./operations.js" defer></script>', "")
     html = html.replace('<script src="./controls.js" defer></script>', "")
+    html = html.replace('<script src="./branch-tree.js" defer></script>', "")
     html = html.replace('<script src="./locales/en.js" defer></script>', "")
     html = html.replace('<script src="./i18n.js" defer></script>', "")
     scripts = "window.GitEnglish = " + (assets / "locales/en.json").read_text(encoding="utf-8") + ";\n"
-    scripts += "\n".join((assets / name).read_text(encoding="utf-8") for name in ("i18n.js", "mcp-bridge.js", "controls.js", "app.js", "operations.js"))
+    scripts += "\n".join((assets / name).read_text(encoding="utf-8") for name in ("i18n.js", "mcp-bridge.js", "controls.js", "branch-tree.js", "app.js", "operations.js"))
     return html.replace("</body>", "<script>" + scripts.replace("</script", "<\\/script") + "</script></body>")
 
 

@@ -356,6 +356,7 @@ class Handler(BaseHTTPRequestHandler):
                   "app.js": ("app.js", "text/javascript; charset=utf-8"),
                   "operations.js": ("operations.js", "text/javascript; charset=utf-8"),
                   "controls.js": ("controls.js", "text/javascript; charset=utf-8"),
+                  "branch-tree.js": ("branch-tree.js", "text/javascript; charset=utf-8"),
                   "i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
                   "locales/en.js": ("locales/en.json", "text/javascript; charset=utf-8"),
                   "style.css": ("style.css", "text/css; charset=utf-8")}

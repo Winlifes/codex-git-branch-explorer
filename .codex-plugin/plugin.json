@@ -1,6 +1,6 @@
 {
   "name": "git-branch-explorer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "description": "Browse Git branches and history in the Codex side panel, with previews for commits, branch management and remote operations.",
   "author": {
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Git Branch Explorer",
     "shortDescription": "Browse Git history and manage repositories in the side panel",
-    "longDescription": "Open a native Codex panel for local and remote branches, commit history and diffs. Preview and confirm staging, commits, branch creation, switching, merging, reverting, deletion of merged branches, fetch, pull and push. Follow the Codex theme, fonts and language, with English and Simplified Chinese UI.",
+    "longDescription": "Open a native Codex panel for local and remote branches grouped into collapsible folders, commit history and diffs. Preview and confirm staging, commits, branch creation, switching, merging, reverting, deletion of merged branches, fetch, pull and push. Follow the Codex theme, fonts and language, with English and Simplified Chinese UI.",
     "developerName": "Winlifes",
     "category": "Productivity",
     "capabilities": [

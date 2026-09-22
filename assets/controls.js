@@ -4,6 +4,7 @@
 window.GitUI = (() => {
   const NS = "http://www.w3.org/2000/svg";
   const paths = {
+    folder: [['path',{d:'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'}]],
     branch: [['circle', {cx:6,cy:5,r:2.5}], ['circle', {cx:6,cy:19,r:2.5}], ['circle', {cx:18,cy:6,r:2.5}], ['path', {d:'M6 7.5v9M18 8.5v1A6.5 6.5 0 0 1 11.5 16H6'}]],
     detached: [['circle',{cx:12,cy:12,r:8}],['circle',{cx:12,cy:12,r:2}]],
     merge: [['circle',{cx:6,cy:5,r:2}],['circle',{cx:6,cy:19,r:2}],['circle',{cx:18,cy:5,r:2}],['path',{d:'M6 7v10M18 7v2a6 6 0 0 1-6 6H6'}]],
