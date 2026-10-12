@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.2 — 2026-10-12
+
+- Restore the stable panel resource URI so cached project entrypoints match fresh tool discovery. A changed URI in v0.5.1 could cause Codex to revoke the iframe before loading it and leave the host spinner visible.
+- Keep the alignment and contrast improvements; retain the v0.5.1 resource as a readable alias.
+- Add regression coverage for resource identity compatibility with existing project tabs.
+
+## 0.5.1 — 2026-10-12
+
+- Align change groups, folder/file rows and 16 px checkboxes with consistent indentation.
+- Improve checkbox borders, checked/mixed indicators and button text contrast in light, dark and host themes.
+- Give disabled actions neutral backgrounds, explain empty file selection and clarify the two commit actions.
+- Wrap workspace toolbars and commit buttons within narrow panes; retain the previous UI resource for existing tabs.
+
+## 0.5.0 — 2026-10-12
+
+- Add Rider-inspired Log, Commit and Stashes tabs, compact commit rows, colored topology graphs, tag browsing and resizable panes.
+- Replace the workspace modal with a persistent directory tree, folder/file checkboxes and a bottom commit composer.
+- Add previewed selected-file commits that preserve unrelated index and working-tree content; retain staged-only commits.
+- Add stash creation, inspection (including untracked files), index-preserving application and deletion previews; fingerprint stash reflog changes.
+- Add numbered unified/side-by-side working diffs, expanded history diffs, keyboard navigation and responsive layouts.
+- Extend read-only workspace/stash routes and bundle all UI modules into the self-contained MCP resource.
+
 ## 0.4.0 — 2026-09-22
 
 - Group local and remote branches into collapsible folders by `/`, preserving full refs for history and operations.

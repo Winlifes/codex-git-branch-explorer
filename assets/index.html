@@ -10,13 +10,18 @@
   <script src="./i18n.js" defer></script>
   <script src="./controls.js" defer></script>
   <script src="./branch-tree.js" defer></script>
+  <script src="./commit-graph.js" defer></script>
+  <script src="./file-tree.js" defer></script>
+  <script src="./diff-view.js" defer></script>
   <script src="./app.js" defer></script>
   <script src="./operations.js" defer></script>
+  <script src="./stashes.js" defer></script>
+  <script src="./workbench.js" defer></script>
 </head>
 <body>
   <header class="topbar">
     <button id="toggle-branches" class="icon-button" data-icon="panel" aria-label="展开或收起分支列表" aria-expanded="false"></button>
-    <div class="brand"><strong>Git</strong><span class="brand-separator">/</span><span id="repo-name">正在连接…</span></div>
+    <div class="brand"><span class="brand-logo" data-icon="branch"></span><strong>Git</strong><span class="brand-separator">/</span><span id="repo-name">正在连接…</span></div>
     <span class="read-only"><i></i><span id="mode-label">只读</span></span>
     <button id="choose-repo" class="icon-button" title="选择仓库" aria-label="选择仓库" hidden><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></button>
     <button id="refresh" class="button" data-icon="refresh" title="重新读取本地分支和提交"><span>刷新</span></button>
@@ -25,6 +30,15 @@
     </select>
     <button id="stop" class="icon-button" data-icon="power" title="停止本地浏览会话" aria-label="停止浏览会话"></button>
   </header>
+  <nav class="workbench-tabs" aria-label="Git 视图">
+    <button id="history-tab" class="workbench-tab active" data-view="history" data-icon="history" aria-pressed="true">日志</button>
+    <button id="open-workspace" class="workbench-tab" data-view="workspace" data-icon="changes" aria-pressed="false">提交 <span id="change-count" class="counter">…</span></button>
+    <button id="stashes-tab" class="workbench-tab" data-view="stashes" data-icon="stash" aria-pressed="false">储藏</button>
+    <span class="toolbar-spacer"></span>
+    <button data-network="fetch" class="button toolbar-action" data-icon="download" disabled>获取</button>
+    <button data-network="pull" class="button toolbar-action" data-icon="arrow-down" disabled>拉取</button>
+    <button data-network="push" class="button toolbar-action" data-icon="arrow-up" disabled>推送</button>
+  </nav>
   <div id="error" role="alert" hidden></div>
   <div id="notice" class="notice" hidden></div>
   <div id="operation-result" class="operation-result" role="status" hidden></div>
@@ -43,6 +57,8 @@
   </form>
   <main class="workspace">
     <div id="scrim" hidden></div>
+    <div id="resize-sidebar" class="pane-splitter sidebar-splitter" role="separator" aria-label="调整分支面板宽度" aria-orientation="vertical" tabindex="0"></div>
+    <div id="resize-detail" class="pane-splitter detail-splitter" role="separator" aria-label="调整详情面板宽度" aria-orientation="vertical" tabindex="0" hidden></div>
     <aside id="sidebar" class="sidebar" aria-label="分支列表">
       <div class="side-heading"><h2>分支</h2><span id="branch-count" class="counter">0</span></div>
       <input id="branch-search" type="search" placeholder="搜索分支…" aria-label="搜索分支" autocomplete="off">
@@ -60,7 +76,6 @@
         <h1 id="branch-title">选择一个分支</h1>
         <p id="branch-description">从分支开始，追溯每一次改动。</p>
         <div id="git-actions" class="git-actions" hidden>
-          <button id="open-workspace" class="button">工作区 <span id="change-count" class="counter">…</span></button>
           <button id="create-branch" class="button" data-icon="plus">新建分支</button>
           <select id="branch-action" aria-label="分支操作">
             <option value="">分支操作…</option>
@@ -82,11 +97,12 @@
         </div>
       </form>
       <div class="list-caption"><span id="history-status" role="status">等待仓库…</span><span>最新 → 最早</span></div>
+      <div class="commit-columns" aria-hidden="true"><span class="graph-heading">图</span><span>提交信息</span><span>作者</span><span>日期</span><span>哈希</span></div>
       <div class="commit-scroll">
         <div id="commits"></div>
         <button id="load-more" class="button load-more" hidden>加载更多提交</button>
       </div>
-      <footer class="history-footer"><span id="repo-path"></span><span>Git · 本地读取</span></footer>
+      <footer class="history-footer"><span>选择提交查看详情</span><span>Git · 本地读取</span></footer>
     </section>
     <section id="detail" class="detail" aria-label="提交详情" hidden>
       <header class="detail-toolbar">
@@ -99,26 +115,46 @@
           <div class="file-heading"><h3>变更文件 <span id="file-count" class="counter"></span></h3><span class="muted">点击查看差异</span></div>
           <div id="files" class="files"></div>
           <div id="patch-section" hidden>
-            <div class="patch-heading"><code id="patch-path"></code><span id="patch-stats"></span></div>
+            <div class="patch-heading"><code id="patch-path"></code><span id="patch-stats"></span><button id="expand-diff" class="icon-button" data-icon="expand" title="展开差异" aria-label="展开差异"></button></div>
             <p id="patch-notice" class="patch-notice" hidden></p>
             <pre id="patch" aria-label="文件差异"></pre>
           </div>
         </div>
       </div>
     </section>
+    <section id="work-dialog" class="work-pane" aria-labelledby="work-title" hidden>
+      <header class="operations-header"><div><h2 id="work-title">工作区</h2><p id="work-branch"></p></div><button id="close-work" class="icon-button" data-icon="close" aria-label="关闭工作区"></button></header>
+      <div class="work-columns">
+        <div class="work-selection-pane">
+          <div class="work-toolbar"><button id="refresh-work" class="icon-button" data-icon="refresh" title="刷新工作区" aria-label="刷新工作区"></button><span></span><button id="discard-selected" class="button" data-icon="undo" disabled>撤回所选</button><button id="stage-selected" class="button" data-icon="plus" disabled>暂存所选</button><button id="unstage-selected" class="button" data-icon="minus" disabled>取消暂存</button></div>
+          <p id="work-error" class="operations-error" role="alert" hidden></p>
+          <div id="work-result" class="work-result" role="status" hidden></div>
+          <div id="work-progress" class="work-progress" hidden></div>
+          <div id="work-changes"></div>
+          <div class="commit-form">
+            <label for="commit-message">提交说明</label>
+            <textarea id="commit-message" rows="5" maxlength="10000" placeholder="描述这次更改…"></textarea>
+            <div><span id="commit-hint" class="muted" role="status">选择要提交的文件</span></div>
+            <div class="commit-buttons"><button id="prepare-commit" class="button primary" data-icon="check" aria-describedby="commit-hint" title="提交勾选文件的全部改动" disabled>提交所选</button><button id="prepare-staged" class="button" title="仅提交已暂存的改动" disabled>提交暂存区</button></div>
+          </div>
+        </div>
+        <div class="work-diff-pane">
+          <div id="work-diff-empty" class="empty"><strong>选择文件查看差异</strong><span>勾选要提交的文件，点击文件名查看改动。</span></div>
+          <div id="work-patch-section" hidden>
+            <div class="work-patch-heading"><code id="work-patch-path"></code><div class="diff-mode"><button data-diff-mode="unified" class="active" aria-pressed="true">统一</button><button data-diff-mode="split" aria-pressed="false">并排</button></div><button id="close-work-patch" class="icon-button" data-icon="close" title="收起差异" aria-label="收起差异"></button></div>
+            <div class="diff-side-labels" hidden><span>修改前</span><span>修改后</span></div>
+            <pre id="work-patch" aria-label="工作区文件差异"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="stashes-pane" class="stashes-pane" aria-labelledby="stashes-title" hidden>
+      <header class="operations-header"><div><h2 id="stashes-title">储藏</h2><p>保存尚未完成的改动，稍后继续。</p></div><button id="create-stash" class="button" data-icon="plus" disabled>储藏修改</button></header>
+      <div class="stash-columns"><div id="stash-list"></div><div class="stash-detail"><div id="stash-summary"></div><div id="stash-files"></div><pre id="stash-diff" aria-label="储藏文件差异"></pre></div></div>
+    </section>
   </main>
-  <dialog id="work-dialog" class="operations-modal work-dialog" aria-labelledby="work-title">
-    <header class="operations-header"><div><h2 id="work-title">工作区</h2><p id="work-branch"></p></div><button id="close-work" class="icon-button" data-icon="close" aria-label="关闭工作区"></button></header>
-    <div class="operations-body">
-      <div class="work-toolbar"><button id="refresh-work" class="button" data-icon="refresh">刷新</button><span></span><button data-network="fetch" class="button" data-icon="download">获取</button><button data-network="pull" class="button" data-icon="arrow-down">拉取</button><button data-network="push" class="button" data-icon="arrow-up">推送</button></div>
-      <p id="work-error" class="operations-error" role="alert" hidden></p>
-      <div id="work-result" class="work-result" role="status" hidden></div>
-      <div id="work-progress" class="work-progress" hidden></div>
-      <div id="work-changes"></div>
-      <div id="work-patch-section" hidden><div class="work-patch-heading"><code id="work-patch-path"></code><button id="close-work-patch" class="text-button">收起差异</button></div><pre id="work-patch"></pre></div>
-      <div class="commit-form"><label for="commit-message">提交说明</label><textarea id="commit-message" rows="3" maxlength="10000" placeholder="描述这次更改…"></textarea><div><span id="commit-hint" class="muted">仅提交已暂存的更改</span><button id="prepare-commit" class="button primary">预览提交</button></div></div>
-    </div>
-  </dialog>
+  <footer class="statusbar"><span class="tiny-dot"></span><span id="status-branch">Git</span><span class="status-divider">/</span><span id="repo-path"></span><span class="toolbar-spacer"></span><span id="status-selection"></span><span id="status-updated">本地读取</span></footer>
+  <dialog id="diff-dialog" class="diff-dialog" aria-labelledby="full-diff-path"><header class="operations-header"><code id="full-diff-path"></code><button id="close-full-diff" class="icon-button" data-icon="close" aria-label="关闭差异"></button></header><pre id="full-diff" aria-label="文件差异"></pre></dialog>
   <dialog id="operation-dialog" class="operations-modal" aria-labelledby="operation-title">
     <header class="operations-header"><h2 id="operation-title">Git 操作</h2><button id="close-operation" class="icon-button" data-icon="close" aria-label="关闭操作"></button></header>
     <div class="operations-body"><div id="operation-content"></div><p id="operation-error" class="operations-error" role="alert" hidden></p></div>

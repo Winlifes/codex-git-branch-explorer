@@ -4,6 +4,12 @@
 window.GitUI = (() => {
   const NS = "http://www.w3.org/2000/svg";
   const paths = {
+    tag: [['path',{d:'M20 13 13 20a2 2 0 0 1-3 0L3 13V3h10l7 7a2 2 0 0 1 0 3Z'}],['circle',{cx:7.5,cy:7.5,r:1}]],
+    stash: [['path',{d:'M3 7h18v14H3ZM2 3h20v4H2ZM9 11h6'}]],
+    file: [['path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z'}],['path',{d:'M14 2v6h6M8 13h8M8 17h6'}]],
+    history: [['circle',{cx:12,cy:12,r:8}],['path',{d:'M12 7v5l3 2'}]],
+    changes: [['path',{d:'M8 4H4v16h16v-4M12 4h8v8M20 4l-9 9'}]],
+    expand: [['path',{d:'M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5'}]],
     folder: [['path',{d:'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'}]],
     branch: [['circle', {cx:6,cy:5,r:2.5}], ['circle', {cx:6,cy:19,r:2.5}], ['circle', {cx:18,cy:6,r:2.5}], ['path', {d:'M6 7.5v9M18 8.5v1A6.5 6.5 0 0 1 11.5 16H6'}]],
     detached: [['circle',{cx:12,cy:12,r:8}],['circle',{cx:12,cy:12,r:2}]],

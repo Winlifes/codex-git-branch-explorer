@@ -149,6 +149,16 @@ class GitExplorerTests(unittest.TestCase):
         self.assertEqual(row["stats"],
                          {"additions": 0, "deletions": 0, "files_changed": 0, "binary_files": 0})
 
+    def test_tags_are_separate_refs_and_annotated_tags_resolve_to_commit_history(self):
+        self.git("tag", "v1.0")
+        self.git("tag", "-a", "release/v1.0", "-m", "Release")
+        data = self.repo.branches()
+        tags = {item["ref"]: item for item in data["tags"]}
+        self.assertEqual(tags["refs/tags/v1.0"]["sha"], self.main)
+        self.assertEqual(tags["refs/tags/release/v1.0"]["sha"], self.main)
+        self.assertEqual(self.repo.commits("refs/tags/release/v1.0")["commits"][0]["sha"], self.main)
+        self.assertFalse(any(item.get("tag") for item in data["branches"]))
+
     def test_unavailable_line_counts_preserve_history_and_can_retry(self):
         with mock_patch.object(self.repo, "commit_stats", side_effect=GitError("Git 查询超时")):
             data = self.repo.commits("refs/heads/main", limit=1)

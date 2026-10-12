@@ -2,7 +2,7 @@
 // Folder paths describe refs for display only; leaves retain the original Git data.
 const GitBranchTree = (() => {
   const folderId = (group, path = "") => JSON.stringify([group, path]);
-  const groupOf = branch => branch.remote ? "remote" : "local";
+  const groupOf = branch => branch.tag ? "tags" : branch.remote ? "remote" : "local";
   function ancestors(branch) {
     const group = groupOf(branch), parts = branch.name.split("/");
     return [folderId(group), ...parts.slice(0, -1).map((_, i) => folderId(group, parts.slice(0, i + 1).join("/")))];
@@ -35,7 +35,7 @@ const GitBranchTree = (() => {
       delete node.folders; delete node.leaves;
       return node;
     }
-    return ["local", "remote"].filter(group => roots.has(group)).map(group => finish(roots.get(group)));
+    return ["local", "remote", "tags"].filter(group => roots.has(group)).map(group => finish(roots.get(group)));
   }
   class Expansion {
     constructor(storage) {

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from mcp_server import Server, ROOT, URI, MIME
+from mcp_server import Server, ROOT, URI, PREVIOUS_URI, MIME
 
 
 class McpTests(unittest.TestCase):
@@ -65,6 +65,10 @@ class McpTests(unittest.TestCase):
         self.assertIn('const GitBranchTree =', resource["text"])
         self.assertNotIn('src="./locales/en.js"', resource["text"])
         self.assertIn('git-language-changed', resource["text"])
+        for name in ("commit-graph", "file-tree", "diff-view", "workbench", "stashes"):
+            self.assertNotIn('src="./' + name + '.js"', resource["text"])
+        self.assertIn('const GitCommitGraph =', resource["text"])
+        self.assertIn('const GitFileTree =', resource["text"])
 
     def test_host_metadata_follows_the_requested_locale(self):
         for locale, expected in (("zh-CN", "Git 分支"), ("en-GB", "Git Branches"), ("fr-FR", "Git Branches")):
@@ -72,6 +76,19 @@ class McpTests(unittest.TestCase):
             self.assertEqual(tools[0]["title"], expected)
         # No per-task query changes the process-wide initialization locale.
         self.assertEqual(self.rpc("tools/list")["tools"][0]["title"], "Git")
+
+    def test_previously_opened_panels_can_read_the_updated_resource(self):
+        contents = self.rpc("resources/read", uri=PREVIOUS_URI)["contents"]
+        self.assertEqual(contents[0]["uri"], PREVIOUS_URI)
+        self.assertEqual(contents[0]["text"], self.rpc("resources/read", uri=URI)["contents"][0]["text"])
+        self.assertEqual(self.rpc("resources/list")["resources"][0]["uri"], URI)
+
+    def test_cached_thread_entrypoints_match_fresh_tool_discovery(self):
+        cached_thread_uri = "ui://git-branch-explorer/v0.5/panel.html"
+        fresh_tool = next(tool for tool in self.rpc("tools/list")["tools"] if tool["name"] == "git_panel")
+        self.assertEqual(fresh_tool["_meta"]["ui"]["resourceUri"], cached_thread_uri)
+        self.assertEqual(fresh_tool["_meta"]["openai/outputTemplate"], cached_thread_uri)
+        self.assertEqual(self.rpc("resources/read", uri=cached_thread_uri)["contents"][0]["uri"], cached_thread_uri)
 
     def test_error_translation_keeps_a_message_for_live_switching(self):
         result = self.rpc("tools/call", name="git_query", arguments={"action": "branches", "repo": 4},

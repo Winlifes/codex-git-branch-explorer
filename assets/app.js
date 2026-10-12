@@ -1,6 +1,6 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-const state = {branches: [], repository: null, branch: null, kind: "all",
+const state = {branches: [], tags: [], repository: null, branch: null, kind: "all",
   commits: [], offset: 0, snapshot: null, hasMore: false, detail: null,
   historyVersion: 0, detailVersion: 0, patchVersion: 0, branchesVersion: 0,
   filters: {query: "", author: "", first_parent: false}};
@@ -98,7 +98,7 @@ function renderBranches() {
   const q = $("branch-search").value.trim().toLocaleLowerCase();
   branchExpansion.use(selectedRepository, state.branch);
   branchExpansion.filter(q);
-  const tree = GitBranchTree.build(state.branches, q, state.kind);
+  const tree = GitBranchTree.build([...state.branches, ...state.tags], q, state.kind);
   branchRows = [];
   function render(nodes, container, depth = 0, parentId = "") {
     nodes.forEach((node, index) => {
@@ -118,9 +118,9 @@ function renderBranches() {
       container.append(item);
       if (folder) {
         const open = branchExpansion.expanded(node);
-        const name = () => node.root ? GitI18n.t(node.group === "local" ? "本地分支" : "远程分支") : node.name;
+        const name = () => node.root ? GitI18n.t(node.group === "tags" ? "标签" : node.group === "local" ? "本地分支" : "远程分支") : node.name;
         item.setAttribute("aria-expanded", String(open));
-        GitI18n.attr(item, "aria-label", () => GitI18n.t("{name}，{count} 个分支", {name: name(), count: node.count}) +
+        GitI18n.attr(item, "aria-label", () => GitI18n.t(node.group === "tags" ? "{name}，{count} 个标签" : "{name}，{count} 个分支", {name: name(), count: node.count}) +
           (node.current ? GitI18n.t("，包含当前分支") : ""));
         const row = el("div", "branch-folder-row");
         GitI18n.attr(row, "title", () => node.root ? name() : node.path);
@@ -152,6 +152,7 @@ function renderBranches() {
           (b.current ? GitI18n.t(" · 当前工作区") : ""));
         const top = el("span", "branch-top"), branchIcon = el("span", "branch-icon");
         branchIcon.append(window.GitUI.icon(b.detached ? "detached" : "branch"));
+        if (b.tag) branchIcon.replaceChildren(window.GitUI.icon("tag"));
         top.append(branchIcon, el("span", "branch-name", () => b.detached ? GitI18n.t("游离 HEAD") : node.name));
         if (b.current) top.append(el("span", "badge current", () => GitI18n.t("当前")));
         item.append(top);
@@ -230,6 +231,7 @@ async function refresh(initialData = null) {
     $("repo-picker").hidden = true;
     document.querySelector(".workspace").hidden = false;
     state.branches = data.branches;
+    state.tags = data.tags || [];
     const repo = data.repository;
     if (repo.detached) state.branches.unshift({ref: repo.head, sha: repo.head, name: "HEAD",
       remote: false, current: true, detached: true, tracking: "", date: "", subject: ""});
@@ -243,7 +245,7 @@ async function refresh(initialData = null) {
     if (repo.bare) notes.push("当前打开的是裸仓库。");
     GitI18n.text($("notice"), () => notes.map(key => GitI18n.t(key)).join(" "));
     $("notice").hidden = !notes.length;
-    const selected = (!changedRepository && state.branches.find(b => b.ref === state.branch?.ref)) ||
+    const selected = (!changedRepository && [...state.branches, ...state.tags].find(b => b.ref === state.branch?.ref)) ||
       state.branches.find(b => b.current) || state.branches[0];
     branchExpansion.use(repo.path, selected);
     if (changedRepository) branchFocusId = "";
@@ -271,7 +273,7 @@ function selectBranch(branch, {reveal = true} = {}) {
   renderBranches();
   GitI18n.text($("branch-title"), () => branch.detached ? GitI18n.t("游离 HEAD") : branch.name);
   GitI18n.text($("branch-description"), () => branch.detached ? GitI18n.t("当前 HEAD 未指向分支") :
-    (branch.remote ? GitI18n.t("远程跟踪分支") : GitI18n.t("本地分支")) +
+    (branch.tag ? GitI18n.t("标签") : branch.remote ? GitI18n.t("远程跟踪分支") : GitI18n.t("本地分支")) +
     (branch.upstream ? GitI18n.t(" · 上游 ") + branch.upstream.replace("refs/remotes/", "").replace("refs/heads/", "") : "") +
     (branch.current ? GitI18n.t(" · 当前工作区") : ""));
   loadHistory();
@@ -308,6 +310,7 @@ async function loadHistory(more = false) {
     $("load-more").hidden = !state.hasMore;
     GitI18n.text($("history-status"), () => GitI18n.t("已显示 ") + state.commits.length + GitI18n.t(" 条") +
       (state.hasMore ? GitI18n.t(" · 可继续加载") : GitI18n.t(" · 已到末尾")));
+    if (!more && state.commits.length && matchMedia("(min-width:1101px)").matches) selectCommit(state.commits[0].sha);
   } catch (err) {
     if (version === state.historyVersion && err.name !== "AbortError") {
       error(err);
@@ -325,7 +328,11 @@ function renderCommits() {
     empty(target, () => GitI18n.t("没有找到提交"), () => GitI18n.t("调整提交信息或作者筛选后再试。"));
     return;
   }
-  for (const c of state.commits) {
+  const filtered = Boolean(state.filters.query || state.filters.author);
+  const graph = GitCommitGraph.layout(state.commits.map(c => ({...c,
+    parents: filtered ? [] : state.filters.first_parent ? c.parents.slice(0, 1) : c.parents})));
+  document.querySelector(".history").style.setProperty("--graph-width", graph.width + "px");
+  for (const [index, c] of state.commits.entries()) {
     const button = el("button", "commit" + (c.parents.length > 1 ? " merge" : "") +
       (state.detail?.sha === c.sha ? " selected" : ""));
     button.dataset.sha = c.sha;
@@ -334,12 +341,15 @@ function renderCommits() {
       (c.stats.binary_files ? GitI18n.t("，另有 ") + c.stats.binary_files + GitI18n.t(" 个二进制文件") : "") : GitI18n.t("行数统计暂不可用");
     GitI18n.attr(button, "aria-label", () => c.subject + GitI18n.t("，") + c.author + GitI18n.t("，") + c.sha.slice(0, 7) +
       GitI18n.t("，提交于 ") + exactDate(timestamp) + GitI18n.t("，") + statsLabel());
-    button.append(el("span", "commit-title", () => c.subject || GitI18n.t("（无提交标题）")));
-    const meta = el("span", "commit-meta");
-    meta.append(el("span", "avatar", () => Array.from(c.author)[0]?.toUpperCase() || "?"),
-      el("span", "", () => c.author), el("code", "", () => c.sha.slice(0, 7)));
-    if (c.parents.length > 1) meta.append(el("span", "badge", () => GitI18n.t("合并")));
-    const trailing = el("span", "commit-trailing");
+    button.append(GitCommitGraph.render(graph.rows[index], graph.width));
+    const title = el("span", "commit-title");
+    const subject = el("span", "commit-subject", () => c.subject || GitI18n.t("（无提交标题）"));
+    subject.title = c.subject;
+    title.append(subject);
+    for (const branch of [...state.branches, ...state.tags].filter(b => b.sha === c.sha).slice(0, 3)) {
+      const ref = el("span", "commit-ref" + (branch.current ? " current" : branch.remote ? " remote" : ""), () => branch.name);
+      ref.title = branch.ref; title.append(ref);
+    }
     const stats = el("span", "commit-stats");
     GitI18n.attr(stats, "title", () => statsLabel() + (c.stats ? GitI18n.t("；") + (c.parents.length ? GitI18n.t("相对第一父提交") : GitI18n.t("根提交，相对空目录")) +
       (c.stats.binary_files ? GitI18n.t("；二进制文件不计入行数") : "") : c.stats_error ? GitI18n.t("：") + GitI18n.format(c.stats_error) : ""));
@@ -351,8 +361,8 @@ function renderCommits() {
     const when = el("time", "when", () => date(timestamp, true));
     when.dateTime = timestamp;
     GitI18n.attr(when, "title", () => GitI18n.t("提交时间（本地时区）：") + exactDate(timestamp));
-    trailing.append(stats, when);
-    meta.append(trailing); button.append(meta);
+    title.append(stats);
+    button.append(title, el("span", "commit-author", () => c.author), when, el("code", "commit-hash", () => c.sha.slice(0, 7)));
     button.addEventListener("click", () => selectCommit(c.sha));
     target.append(button);
   }
@@ -362,6 +372,7 @@ function closeDetail() {
   controllers.get("commit")?.abort(); controllers.get("patch")?.abort();
   state.detail = null;
   $("detail").hidden = true;
+  $("resize-detail").hidden = true;
   document.body.classList.remove("has-detail");
   for (const row of $("commits").children) row.classList.remove("selected");
 }
@@ -371,11 +382,15 @@ async function selectCommit(sha, parent = 0) {
   controllers.get("patch")?.abort();
   clearError();
   $("detail").hidden = false;
+  $("resize-detail").hidden = false;
   document.body.classList.add("has-detail");
   $("file-section").hidden = true;
   $("patch-section").hidden = true;
   empty($("commit-detail"), () => GitI18n.t("正在读取提交详情…"));
-  for (const row of $("commits").children) row.classList.toggle("selected", row.dataset.sha === sha);
+  for (const row of $("commits").children) {
+    row.classList.toggle("selected", row.dataset.sha === sha);
+    if (row.matches("button")) row.tabIndex = row.dataset.sha === sha ? 0 : -1;
+  }
   try {
     const c = await api("commit", {sha, parent});
     if (version !== state.detailVersion) return;
@@ -423,15 +438,8 @@ function renderDetail(c) {
   window.GitOperations?.addRevertButton(target, c);
   $("file-section").hidden = false;
   GitI18n.text($("file-count"), () => c.files.length);
-  $("files").replaceChildren();
-  for (const file of c.files) {
-    const button = el("button", "file");
-    button.dataset.path = file.path;
-    button.append(el("span", "file-status " + (file.status === "A" ? "add" : file.status === "D" ? "del" : ""), () => file.status),
-      el("code", "", () => file.path));
-    button.addEventListener("click", () => selectFile(file.path));
-    $("files").append(button);
-  }
+  GitFileTree.mount($("files"), c.files, {onOpen: file => selectFile(file.path),
+    key: selectedRepository + ":commit", storage: folderStorage});
   if (!c.files.length) empty($("files"), () => GitI18n.t("没有文件改动"), () => GitI18n.t("此提交相对所选父提交没有差异。"), true);
 }
 async function selectFile(path) {
@@ -443,22 +451,19 @@ async function selectFile(path) {
   GitI18n.text($("patch-path"), () => path);
   GitI18n.text($("patch-stats"), () => "");
   GitI18n.text($("patch"), () => GitI18n.t("正在读取差异…"));
-  for (const row of $("files").children) row.classList.toggle("active", row.dataset.path === path);
+  for (const row of $("files").querySelectorAll("[data-path]")) row.classList.toggle("active", row.dataset.path === path);
   try {
     const data = await api("patch", {sha: c.sha, path, parent: c.parent_index});
     if (version !== state.patchVersion) return;
     let added = 0, deleted = 0;
-    const frag = document.createDocumentFragment();
     for (const line of data.patch.split("\n")) {
-      let cls = "";
       if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ") ||
-          line.startsWith("index ")) cls = "meta";
-      else if (line.startsWith("+")) { cls = "add"; added++; }
-      else if (line.startsWith("-")) { cls = "del"; deleted++; }
-      else if (line.startsWith("@@")) cls = "hunk";
-      frag.append(el("span", "diff-line " + cls, () => line || " "));
+          line.startsWith("index ")) continue;
+      if (line.startsWith("+")) added++;
+      else if (line.startsWith("-")) deleted++;
     }
-    $("patch").replaceChildren(frag);
+    GitDiffView.render($("patch"), data);
+    window.GitWorkbench?.setDiff(path, data);
     GitI18n.text($("patch-stats"), () => "+" + added + "  −" + deleted);
     if (data.truncated) {
       GitI18n.text($("patch-notice"), () => GitI18n.t("差异较大，仅展示前 800 KB；增删行数仅统计已展示部分。"));

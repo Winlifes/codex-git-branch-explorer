@@ -1,14 +1,19 @@
 "use strict";
 // Native-panel controls. Browsing a branch never switches the working tree.
 window.GitOperations = (() => {
-  if (!nativeHost) return {updateBranchActions() {}, addRevertButton() {}};
+  const readOnly = !nativeHost;
+  const selected = new Set(), collapsed = new Set();
+  let selectionInitialized = false, activeWorkPath = "", workPatchData = null, workPatchVersion = 0;
+  let diffMode = "unified";
+  try { diffMode = localStorage.getItem("git-diff-mode") || "unified"; } catch {}
   let current = null, repository = "", statusVersion = 0, dialogVersion = 0;
   let busy = false, preview = null, submit = null, returnFocus = null;
   const work = $("work-dialog"), dialog = $("operation-dialog");
-  const labels = {switch: "切换", create: "创建", stage: "暂存", unstage: "取消暂存", commit: "提交",
+  const labels = {switch: "切换", create: "创建", stage: "暂存", unstage: "取消暂存", commit: "提交", commit_selected: "提交",
     fetch: "获取", pull: "拉取", push: "推送", merge: "合并", revert: "撤销提交", delete: "删除分支",
     continue: "继续", abort: "中止", discard: "撤回改动"};
-  GitI18n.text($("mode-label"), () => GitI18n.t("本地"));
+  Object.assign(labels, {stash: "储藏", stash_apply: "应用储藏", stash_drop: "删除储藏"});
+  GitI18n.text($("mode-label"), () => GitI18n.t(readOnly ? "只读" : "本地"));
 
   function displayError(err, target = $("operation-error")) {
     GitI18n.text(target, () => err.message);
@@ -24,10 +29,12 @@ window.GitOperations = (() => {
   }
   function updateBranchActions() {
     const b = state.branch;
-    $("git-actions").hidden = !state.repository || state.repository.bare;
+    $("open-workspace").disabled = !state.repository || state.repository.bare;
+    $("stashes-tab").disabled = !state.repository || state.repository.bare;
+    $("git-actions").hidden = readOnly || !state.repository || state.repository.bare;
     for (const option of $("branch-action").options) {
       if (!option.value) continue;
-      option.disabled = !b || b.unborn || b.detached ||
+      option.disabled = !b || b.tag || b.unborn || b.detached ||
         ((option.value === "switch" || option.value === "delete") && (b.remote || b.current));
     }
     $("create-branch").disabled = !state.repository?.head;
@@ -41,12 +48,19 @@ window.GitOperations = (() => {
       const data = await api("status", {}, "work-status");
       if (version !== statusVersion || path !== selectedRepository) return;
       current = data;
+      $("create-stash").disabled = readOnly || !data.changes.length || Boolean(data.operation) || Boolean(data.conflict_count) || !data.repository.head;
+      document.querySelectorAll("[data-network]").forEach(button => { button.disabled = readOnly || !data.remotes.length || Boolean(data.operation); });
+      document.dispatchEvent(new CustomEvent("git-workspace-status", {detail: data}));
       GitI18n.text($("change-count"), () => data.changes.length);
-      if (work.open) renderWorkspace();
+      if (!work.hidden) {
+        renderWorkspace();
+        const active = data.changes.find(file => file.path === activeWorkPath);
+        if (active) showWorkingPatch(active.path, !active.unstaged && active.staged);
+      }
     } catch (err) {
       if (err.name !== "AbortError") {
         GitI18n.text($("change-count"), () => "?");
-        if (work.open) displayError(err, $("work-error"));
+        if (!work.hidden) displayError(err, $("work-error"));
       }
     } finally { if (version === statusVersion) $("refresh-work").disabled = false; }
   }
@@ -90,7 +104,7 @@ window.GitOperations = (() => {
     submit = action; $("confirm-operation").disabled = false;
   }
   async function prepare(action, args = {}, alreadyOpen = false) {
-    if (busy) return;
+    if (busy || readOnly) return;
     if (!alreadyOpen && !beginDialog(() => GitI18n.t(labels[action]))) return;
     const version = ++dialogVersion, path = selectedRepository;
     $("operation-error").hidden = true;
@@ -113,7 +127,7 @@ window.GitOperations = (() => {
         target.append(list);
       }
       GitI18n.text($("confirm-operation"), () => GitI18n.t("确认") + GitI18n.t(labels[action]));
-      $("confirm-operation").classList.toggle("danger", ["delete", "abort", "discard"].includes(action));
+      $("confirm-operation").classList.toggle("danger", ["delete", "abort", "discard", "stash_drop"].includes(action));
       $("confirm-operation").disabled = false;
       submit = execute;
       $("cancel-operation").focus();
@@ -122,7 +136,7 @@ window.GitOperations = (() => {
       displayError(err);
       GitI18n.text($("confirm-operation"), () => GitI18n.t("预览操作"));
       $("confirm-operation").disabled = !alreadyOpen;
-      if (work.open) loadStatus();
+      if (!work.hidden) loadStatus();
     }
   }
   async function execute() {
@@ -135,11 +149,11 @@ window.GitOperations = (() => {
     $("cancel-operation").disabled = true; $("close-operation").disabled = true;
     try {
       const result = await nativeHost.operation("git_apply", {repo: chosen.repository.path, token: chosen.token});
-      if (result.ok && chosen.action === "commit") $("commit-message").value = "";
+      if (result.ok && ["commit", "commit_selected"].includes(chosen.action)) $("commit-message").value = "";
       // The next explicit action always gets a fresh preview, even after failure.
       busy = false; closeOperation();
       if (!["stage", "unstage", "discard"].includes(chosen.action)) {
-        if (["switch", "create", "commit", "merge", "revert", "continue", "abort"].includes(chosen.action)) state.branch = null;
+        if (["switch", "create", "commit", "commit_selected", "merge", "revert", "continue", "abort"].includes(chosen.action)) state.branch = null;
         await refresh();
       }
       await loadStatus();
@@ -155,8 +169,8 @@ window.GitOperations = (() => {
         }
         notice.scrollIntoView({block:"nearest"});
       }
-      if (!result.ok && work.open) displayError(GitI18n.error(() => result.message), $("work-error"));
-      if (!result.ok && result.status?.conflict_count && !work.open) openWorkspace();
+      if (!result.ok && !work.hidden) displayError(GitI18n.error(() => result.message), $("work-error"));
+      if (!result.ok && result.status?.conflict_count && work.hidden) openWorkspace();
     } catch (err) {
       busy = false; preview = null; submit = null;
       displayError(GitI18n.error(() => err.message + GitI18n.t("\n请刷新确认仓库状态后再操作；不会自动重复执行。")));
@@ -204,8 +218,16 @@ window.GitOperations = (() => {
     enableForm(() => prepare("create", {ref: source, name: name.value.trim(), checkout: checkout.checked}, true));
     name.focus();
   }
+  function createStash() {
+    if (readOnly || !beginDialog(() => GitI18n.t("储藏修改"))) return;
+    const message = input(() => GitI18n.t("储藏说明"), "", GitI18n.t("描述尚未完成的工作…"));
+    message.maxLength = 10000;
+    const include = checkbox(() => GitI18n.t("包含未跟踪文件"), true);
+    enableForm(() => prepare("stash", {message: message.value, include_untracked: include.checked}, true));
+    message.focus();
+  }
   function addRevertButton(target, commit) {
-    if (state.repository?.bare) return;
+    if (readOnly || state.repository?.bare) return;
     const button = el("button", "button revert-button", () => GitI18n.t("撤销此提交…"));
     button.addEventListener("click", () => {
       if (commit.parents.length < 2) { prepare("revert", {sha: commit.sha}); return; }
@@ -227,7 +249,8 @@ window.GitOperations = (() => {
     $("work-changes").replaceChildren(el("p", "muted", () => GitI18n.t("正在读取工作区…")));
     $("prepare-commit").disabled = true;
     closeBranches();
-    if (!work.open) work.showModal();
+    window.GitWorkbench?.view("workspace");
+    work.hidden = false;
     await loadStatus();
   }
   function renderWorkspace() {
@@ -235,8 +258,17 @@ window.GitOperations = (() => {
     if (!s) return;
     GitI18n.text($("work-branch"), () => s.repository.name + " / " +
       (s.repository.current_ref?.replace(/^refs\/heads\//, "") || GitI18n.t("游离 HEAD")));
-    $("work-patch-section").hidden = true;
-    controllers.get("working-patch")?.abort();
+    const available = new Set(s.changes.map(file => file.path));
+    for (const path of selected) if (!available.has(path)) selected.delete(path);
+    if (!selectionInitialized) {
+      for (const file of s.changes) if (file.staged && file.operable && !file.conflict) selected.add(file.path);
+      selectionInitialized = true;
+    }
+    if (activeWorkPath && !available.has(activeWorkPath)) {
+      activeWorkPath = ""; workPatchData = null; workPatchVersion++;
+      $("work-patch-section").hidden = true;
+      $("work-diff-empty").hidden = false;
+    }
     const progress = $("work-progress"); progress.replaceChildren(); progress.hidden = !s.operation;
     if (s.operation) {
       const title = () => s.operation === "merge" ? GitI18n.t("合并") : s.operation === "revert" ? GitI18n.t("撤销") : s.operation;
@@ -253,93 +285,124 @@ window.GitOperations = (() => {
       }
     }
     const target = $("work-changes"); target.replaceChildren();
-    for (const [key, title, action] of [["unstaged", "更改", "stage"], ["staged", "已暂存", "unstage"]]) {
-      const files = s.changes.filter(c => c[key]);
-      const group = el("section", "work-group"), heading = el("div", "work-group-heading");
-      heading.append(el("h3", "", () => GitI18n.t(title) + " · " + files.length));
-      const paths = files.filter(c => c.operable).map(c => c.path);
-      const all = el("button", "text-button", () => action === "stage" ? GitI18n.t("全部暂存") : GitI18n.t("全部取消暂存"));
-      all.disabled = !paths.length || paths.length > 500;
-      all.addEventListener("click", () => prepare(action, {paths}));
-      const groupActions = el("div", "work-group-actions");
-      if (key === "unstaged") {
-        const discard = el("button", "text-button discard-all", () => GitI18n.t("全部撤回"));
-        discard.prepend(window.GitUI.icon("undo"));
-        GitI18n.attr(discard, "title", () => GitI18n.t("撤回全部未暂存的改动，保留已暂存的内容"));
-        discard.disabled = !files.length || Boolean(s.operation) || files.some(f => !f.operable || f.conflict);
-        discard.addEventListener("click", () => prepare("discard", {all:true}));
-        groupActions.append(discard);
-      }
-      groupActions.append(all); heading.append(groupActions); group.append(heading);
-      if (!files.length) group.append(el("p", "work-empty", () => key === "unstaged" ? GitI18n.t("工作区没有未暂存的更改") : GitI18n.t("还没有暂存的更改")));
-      for (const file of files) {
-        const row = el("div", "work-file");
-        const view = el("button", "work-file-path");
-        view.append(el("span", "file-status" + (file.conflict ? " del" : ""), () => file.conflict ? GitI18n.t("冲突") :
-          file.untracked ? "U" : file[key === "staged" ? "index_status" : "worktree_status"]), el("code", "", () => file.path));
-        view.disabled = !file.operable;
-        view.addEventListener("click", () => showWorkingPatch(file.path, key === "staged"));
-        const change = el("button", "icon-button");
-        change.append(window.GitUI.icon(action === "stage" ? "plus" : "minus"));
-        GitI18n.attr(change, "aria-label", () => (action === "stage" ? GitI18n.t("暂存 ") : GitI18n.t("取消暂存 ")) + file.path);
-        change.disabled = !file.operable;
-        change.addEventListener("click", () => prepare(action, {paths: [file.path]}));
-        row.append(view);
-        if (key === "unstaged") {
-          const discard = el("button", "icon-button discard-file");
-          discard.append(window.GitUI.icon("undo"));
-          GitI18n.attr(discard, "aria-label", () => GitI18n.t("撤回改动 ") + file.path);
-          GitI18n.attr(discard, "title", () => GitI18n.t("撤回此文件未暂存的改动，保留已暂存的内容"));
-          discard.disabled = !file.operable || file.conflict || Boolean(s.operation);
-          discard.addEventListener("click", () => prepare("discard", {paths:[file.path]}));
-          row.append(discard);
-        }
-        row.append(change); group.append(row);
+    for (const [key, title] of [["tracked", "更改"], ["untracked", "未进行版本管理的文件"]]) {
+      const files = s.changes.filter(file => key === "untracked" ? file.untracked : !file.untracked);
+      if (!files.length && key === "untracked") continue;
+      const group = el("section", "work-group"), heading = el("div", "work-group-heading file-tree-row selectable");
+      const expand = el("button", "file-disclosure" + (collapsed.has(key) ? "" : " expanded"));
+      expand.append(GitUI.icon("chevron")); expand.setAttribute("aria-expanded", String(!collapsed.has(key)));
+      GitI18n.attr(expand, "aria-label", () => GitI18n.t("展开或收起 ") + GitI18n.t(title));
+      expand.addEventListener("click", () => { collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key); renderWorkspace(); });
+      const all = el("input"); all.type = "checkbox"; all.dataset.group = key;
+      const check = GitFileTree.selection(files, selected);
+      Object.assign(all, {checked: check.checked, indeterminate: check.indeterminate, disabled: check.disabled});
+      GitI18n.attr(all, "aria-label", () => GitI18n.t("选择 ") + GitI18n.t(title));
+      all.addEventListener("change", () => { for (const path of check.paths) all.checked ? selected.add(path) : selected.delete(path); renderWorkspace(); });
+      heading.append(expand, all, el("h3", "", () => GitI18n.t(title)),
+        el("span", "file-tree-count", () => GitI18n.t("{count} 个文件", {count: files.length})));
+      group.append(heading);
+      if (!files.length) group.append(el("p", "work-empty", () => GitI18n.t("工作区没有未暂存的更改")));
+      if (!collapsed.has(key)) {
+        const tree = el("div", "work-file-tree"); group.append(tree);
+        GitFileTree.mount(tree, files, {selected, key: repository + ":" + key, storage: folderStorage,
+          active: activeWorkPath,
+          onToggle(paths, checked) { for (const path of paths) checked ? selected.add(path) : selected.delete(path); updateSelection(); },
+          onOpen: file => showWorkingPatch(file.path, !file.unstaged && file.staged),
+          actions(file) {
+            const actions = el("span", "work-file-actions");
+            if (file.staged) {
+              const badge = el("span", "staged-mark"); badge.append(GitUI.icon("check"));
+              GitI18n.attr(badge, "title", () => GitI18n.t("已暂存")); actions.append(badge);
+            }
+            for (const action of ["discard", "stage", "unstage"]) {
+              if (action === "unstage" ? !file.staged : !file.unstaged) continue;
+              const button = el("button", "icon-button" + (action === "discard" ? " discard-file" : ""));
+              button.append(GitUI.icon(action === "discard" ? "undo" : action === "stage" ? "plus" : "minus"));
+              GitI18n.attr(button, "aria-label", () => GitI18n.t(labels[action]) + " " + file.path);
+              GitI18n.attr(button, "title", () => GitI18n.t(labels[action]));
+              button.disabled = readOnly || !file.operable || (action === "discard" && (file.conflict || Boolean(s.operation)));
+              button.addEventListener("click", () => prepare(action, {paths: [file.path]})); actions.append(button);
+            }
+            return actions;
+          }});
       }
       target.append(group);
     }
-    $("prepare-commit").disabled = Boolean(s.conflict_count) || s.operation === "revert" || !s.staged_count;
-    GitI18n.text($("commit-hint"), () => GitI18n.t("将提交 {count} 个已暂存文件", {count: s.staged_count}));
-    document.querySelectorAll("[data-network]").forEach(b => { b.disabled = !s.remotes.length || Boolean(s.operation); });
+    updateSelection();
+    $("prepare-staged").disabled = readOnly || Boolean(s.conflict_count) || s.operation === "revert" || !s.staged_count;
+    document.querySelectorAll("[data-network]").forEach(button => { button.disabled = readOnly || !s.remotes.length || Boolean(s.operation); });
+  }
+  function updateSelection() {
+    if (!current) return;
+    const paths = [...selected];
+    $("prepare-commit").disabled = readOnly || !paths.length || paths.length > 500 || Boolean(current.conflict_count) || Boolean(current.operation);
+    $("stage-selected").disabled = readOnly || !current.changes.some(file => selected.has(file.path) && file.unstaged && file.operable);
+    $("unstage-selected").disabled = readOnly || !current.changes.some(file => selected.has(file.path) && file.staged && file.operable);
+    $("discard-selected").disabled = readOnly || Boolean(current.operation) || !current.changes.some(file => selected.has(file.path) && file.unstaged && file.operable && !file.conflict);
+    GitI18n.text($("commit-hint"), () => readOnly ? GitI18n.t("浏览器模式只读；请在 Codex Git 面板中提交。") :
+      !paths.length ? GitI18n.t("请先勾选要提交的文件（共 {total} 个）。", {total: current.changes.length}) :
+      GitI18n.t("已选择 {selected} / {total} 个文件", {selected: paths.length, total: current.changes.length}));
+    for (const checkbox of $("work-changes").querySelectorAll("input[data-group]")) {
+      const files = current.changes.filter(file => checkbox.dataset.group === "untracked" ? file.untracked : !file.untracked);
+      const check = GitFileTree.selection(files, selected);
+      checkbox.checked = check.checked; checkbox.indeterminate = check.indeterminate;
+    }
+    GitI18n.text($("status-selection"), () => paths.length ? GitI18n.t("已选择 {count} 个文件", {count: paths.length}) : "");
   }
   async function showWorkingPatch(path, staged) {
+    activeWorkPath = path;
+    const version = ++workPatchVersion;
     GitI18n.text($("work-patch-path"), () => path + (staged ? GitI18n.t(" · 已暂存") : GitI18n.t(" · 工作区")));
-    $("work-patch-section").hidden = false;
+    $("work-patch-section").hidden = false; $("work-diff-empty").hidden = true;
     GitI18n.text($("work-patch"), () => GitI18n.t("正在读取差异…"));
     try {
       const data = await api("working_patch", {path, staged}, "working-patch");
-      const fragment = document.createDocumentFragment();
-      if (data.notice) fragment.append(el("span", "diff-line meta", () => data.notice));
-      for (const line of data.patch.split("\n")) {
-        const cls = line.startsWith("+++") || line.startsWith("---") ? "meta" :
-          line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : line.startsWith("@@") ? "hunk" : "";
-        fragment.append(el("span", "diff-line " + cls, () => line || " "));
-      }
-      if (data.truncated) fragment.append(el("span", "diff-line meta", () => GitI18n.t("差异较大，仅展示前 800 KB。")));
-      $("work-patch").replaceChildren(fragment);
-      $("work-patch-section").scrollIntoView({block: "nearest"});
-    } catch (err) { if (err.name !== "AbortError") displayError(err, $("work-error")); }
+      if (version !== workPatchVersion) return;
+      workPatchData = data; renderWorkingDiff();
+    } catch (err) { if (err.name !== "AbortError" && version === workPatchVersion) displayError(err, $("work-error")); }
   }
+  function renderWorkingDiff() {
+    const split = diffMode === "split";
+    document.querySelectorAll("[data-diff-mode]").forEach(button => {
+      const active = button.dataset.diffMode === diffMode;
+      button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelector(".diff-side-labels").hidden = !split;
+    if (workPatchData) GitDiffView.render($("work-patch"), workPatchData, split);
+  }
+  document.querySelectorAll("[data-diff-mode]").forEach(button => button.addEventListener("click", () => {
+    diffMode = button.dataset.diffMode;
+    try { localStorage.setItem("git-diff-mode", diffMode); } catch {}
+    renderWorkingDiff();
+  }));
+  renderWorkingDiff();
   document.addEventListener("git-repository-loaded", () => {
     if (repository !== selectedRepository) {
       repository = selectedRepository; current = null;
       $("commit-message").value = ""; $("operation-result").hidden = true;
       $("work-result").hidden = true;
-      work.close(); closeOperation();
+      selected.clear(); selectionInitialized = false; activeWorkPath = ""; workPatchData = null; workPatchVersion++;
+      window.GitWorkbench?.view("history"); work.hidden = true; closeOperation();
     }
     updateBranchActions(); loadStatus();
   });
   $("open-workspace").addEventListener("click", openWorkspace);
-  $("close-work").addEventListener("click", () => { work.close(); $("open-workspace").focus(); });
+  $("close-work").addEventListener("click", () => { window.GitWorkbench?.view("history"); work.hidden = true; $("open-workspace").focus(); });
   $("refresh-work").addEventListener("click", () => { $("work-error").hidden = true; loadStatus(); });
   $("create-branch").addEventListener("click", createBranch);
+  $("create-stash").addEventListener("click", createStash);
   $("branch-action").addEventListener("change", event => {
     const action = event.target.value; event.target.value = "";
     if (action && state.branch) prepare(action, {ref: state.branch.ref});
   });
   document.querySelectorAll("[data-network]").forEach(b => b.addEventListener("click", () => network(b.dataset.network)));
-  $("prepare-commit").addEventListener("click", () => prepare("commit", {message: $("commit-message").value}));
-  $("close-work-patch").addEventListener("click", () => { controllers.get("working-patch")?.abort(); $("work-patch-section").hidden = true; });
+  $("prepare-commit").addEventListener("click", () => prepare("commit_selected", {paths: [...selected], message: $("commit-message").value}));
+  $("prepare-staged").addEventListener("click", () => prepare("commit", {message: $("commit-message").value}));
+  $("discard-selected").addEventListener("click", () => prepare("discard", {paths: current.changes.filter(file => selected.has(file.path) && file.unstaged && file.operable && !file.conflict).map(file => file.path)}));
+  for (const [id, action, key] of [["stage-selected", "stage", "unstaged"], ["unstage-selected", "unstage", "staged"]]) {
+    $(id).addEventListener("click", () => prepare(action, {paths: current.changes.filter(file => selected.has(file.path) && file[key] && file.operable).map(file => file.path)}));
+  }
+  $("close-work-patch").addEventListener("click", () => { controllers.get("working-patch")?.abort(); workPatchVersion++; workPatchData = null; activeWorkPath = ""; $("work-patch-section").hidden = true; $("work-diff-empty").hidden = false; });
   $("confirm-operation").addEventListener("click", () => { if (!busy && !$("confirm-operation").disabled) submit?.(); });
   $("cancel-operation").addEventListener("click", closeOperation);
   $("close-operation").addEventListener("click", closeOperation);
@@ -354,5 +417,5 @@ window.GitOperations = (() => {
     if (event.key === "Escape") event.stopPropagation();
   });
   updateBranchActions();
-  return {updateBranchActions, addRevertButton};
+  return {updateBranchActions, addRevertButton, openWorkspace, loadStatus, prepare};
 })();
