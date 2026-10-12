@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 — 2026-10-12
+
+- When a commit message is empty or whitespace-only, open an editable draft based on local file changes, line counts and recognized symbols/configuration keys. Selected-file drafts use the worktree; staged drafts use index blobs.
+- Keep edited messages and cancelled drafts. Re-preview after editing before applying a commit, and save the confirmed message through existing Git hooks/signing.
+- Bound content inspection for large changes and mark partial summaries; never call external AI services or stage/commit while generating drafts.
+
 ## 0.6.0 — 2026-10-12
 
 - Add creation of GitHub repositories from projects without Git: account confirmation, private/public visibility, name/description, initial branch, ignore templates, and optional first commit/upload.

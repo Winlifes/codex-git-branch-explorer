@@ -1,5 +1,7 @@
 # Screenshot capture notes / 截图来源
 
+`commit-message-draft-dark.jpg` shows v0.7.0 on 2026-10-12 at the default 1280 × 720 viewport. The local MCP development host connects the actual panel and draft generator to a disposable `orbit-studio` repository. The unedited image shows an editable draft for two selected C# files, including names found in their changes. The top banner identifies the temporary fixture. No real project files or remote repositories were modified.
+
 `github-create-dark.jpg` shows v0.6.0 on 2026-10-12 at the default 857 × 984 viewport. The local MCP development host uses the actual panel and Python preview implementation, a disposable `Orbit Starter` project, and a simulated GitHub account `demo-user`. The host explicitly disables GitHub creation. The image is unedited and shows account confirmation, private-by-default visibility, ignore rules, and optional initial upload. No real GitHub repository was created.
 
 `workbench-ui-fix-dark.jpg` shows the v0.5.1 alignment and contrast fixes, captured on 2026-10-12 at the default 1280 × 720 viewport in the same local MCP development host and disposable `orbit-studio` repository. It shows mixed folder selection, aligned checkboxes and readable enabled/disabled commit actions. Selecting files and entering the example message did not stage or commit any changes.

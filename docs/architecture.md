@@ -63,6 +63,8 @@
 
 `commit_selected` 验证预览中的确切路径，在确认后执行字面路径的 `git add` 与 `git commit --only`，包含所选文件的全部当前内容并保留其他文件的 index 内容。原有 `commit` 仍只提交 index。所选提交不用于进行中的合并或撤销；失败后刷新查看暂存状态。
 
+`git_query` 的 `commit_message` 是只读查询：`staged=true` 读取 index 对象，`paths` 读取所选文件的工作区内容并与 HEAD 对象比较。与提交预览共用范围验证，生成前后检查仓库指纹，不创建确认凭据或写入 index。`scripts/commit_message.py` 最多详细提取前 20 个文件，每个版本读取 48 KB，生成文件动作、增删行和可识别的符号／配置键；超过范围时明确标记部分摘要。没有外部模型或网络请求。空说明先显示草稿编辑页，再通过原有 `git_prepare` 预览。预览中的 textarea 编辑会清除当前确认凭据并回到「预览提交」，不会使用旧说明提交；草稿在取消后保留在工作区输入框中。
+
 储藏应用使用 `git stash apply --index`，要求工作区干净。储藏按 SHA 定位，删除使用预览对应的 reflog 引用。状态指纹包含储藏 SHA 与引用序号，所以删除旧记录等未改变 stash tip 的操作也会使旧预览失效。
 
 `assets/commit-graph.js` 根据父提交 SHA 布置图线，分页后重算已加载行，字面筛选只画节点。`assets/file-tree.js` 使用 Map 构建目录并计算三态复选框。`assets/diff-view.js` 解析 hunk 行号并对齐修改块，两栏分别整体横向滚动、同步纵向滚动。`assets/workbench.js` 负责页签与面板尺寸，尺寸保存在本地存储。

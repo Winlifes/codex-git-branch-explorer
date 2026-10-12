@@ -8,6 +8,8 @@
 
 这些查询结果经本地 MCP 传给 Codex 宿主及插件面板。本地运行不表示数据不会传给 Codex；Codex 对数据的处理由用户与 OpenAI 的设置和条款决定。
 
+提交说明为空时，草稿生成会读取本次提交范围内的本地文件或暂存区对象，提取文件变化、增删行与可识别的符号名称。生成在本地完成，不调用外部 AI 服务；草稿及编辑结果通过 MCP 传给面板。只有确认提交后才写入 Git 提交信息；确认推送后提交信息会随提交发送到远程仓库。
+
 ## 网络与第三方
 
 本插件没有维护者运营的云端数据服务、遥测或分析追踪。面板使用随插件提供的资源。原生模式无需 HTTP 端口。
@@ -35,6 +37,8 @@
 The plugin runs Git locally and reads the selected repository's paths, branches, commit metadata, file diffs, index and working tree. It also reads local Codex task/project metadata and message-presence flags to identify the active project, without reading message bodies.
 
 Query results are passed to the Codex host and panel through MCP. There is no maintainer-operated cloud service, telemetry or analytics. Confirmed Git remote operations use the repository's configured remotes and the user's Git credentials, hooks and signing settings.
+
+Empty-message drafts read local worktree files or index blobs within the intended commit scope, extracting file changes, line counts and recognizable names. Drafting is local and calls no external AI service. Drafts and edits pass through MCP to the panel. A message is saved to Git only after confirmation, and is sent to a remote together with the commit only after a confirmed push.
 
 Opening GitHub creation queries the signed-in account through the official GitHub CLI; preparing a creation checks whether the target name exists. Account tokens are neither accepted nor displayed by the plugin. After confirmation, GitHub receives the repository name, description, and visibility, plus the reviewed files and initial commit if upload was selected. Public repository content is visible to anyone. The initial push uses the GitHub CLI credential helper for the confirmed account. Filename exclusions are not a full secret-content scan.
 

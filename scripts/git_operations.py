@@ -18,6 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from git_explorer import GitError, Repository, decode, MAX_PATCH
 from worktree_discard import prepare_discard, create_backup, remove_untracked
+from commit_message import generate as generate_commit_message
 
 ACTIONS = ("switch", "create", "stage", "unstage", "discard", "commit", "commit_selected", "fetch", "pull", "push",
            "merge", "revert", "delete", "continue", "abort", "stash", "stash_apply", "stash_drop")
@@ -189,10 +190,51 @@ def working_patch(repo, path, staged=False):
     return {"patch": decode(raw), "truncated": truncated}
 
 
+def commit_files(s, action, paths=None):
+    if not s["writable"]:
+        raise GitError(ui("裸仓库仅支持浏览；请打开工作树执行操作。"))
+    if not s["repository"]["current_ref"]:
+        raise GitError(ui("当前是游离 HEAD，请先创建并切换到本地分支。"))
+    operation = s["operation"]
+    if operation not in (None, "merge", "revert"):
+        raise GitError(ui("当前有未完成的 ") + operation + ui("，请在终端处理后刷新。"))
+    if s["conflict_count"]:
+        raise GitError(ui("请先解决冲突并暂存对应文件。"))
+    if operation == "revert":
+        raise GitError(ui("请使用「继续撤销」完成正在进行的操作。"))
+    if action == "commit_selected":
+        if operation:
+            raise GitError(ui("请先完成当前 Git 操作，再提交所选文件。"))
+        if (not isinstance(paths, list) or not 1 <= len(paths) <= 500
+                or any(not isinstance(p, str) for p in paths) or len(set(paths)) != len(paths)):
+            raise GitError(ui("请选择 1 至 500 个不同的文件。"))
+        available = {c["path"] for c in s["changes"] if c["operable"] and not c["conflict"]}
+        if not set(paths) <= available:
+            raise GitError(ui("所选文件状态已变化或文件名无法处理，请刷新工作区。"))
+        return paths
+    if not s["staged_count"] and operation != "merge":
+        raise GitError(ui("还没有暂存的更改。"))
+    return [c["path"] for c in s["changes"] if c["staged"]]
+
+
 class Operations:
     def __init__(self):
         self.plans = {}
         self.lock = threading.RLock()
+
+    def commit_message(self, repo, paths=None, staged=False, locale="zh-CN"):
+        if type(staged) is not bool or (staged and paths is not None):
+            raise GitError(ui("无效的提交说明生成范围。"))
+        s = status(repo)
+        scope = commit_files(s, "commit" if staged else "commit_selected", paths)
+        by_path = {c["path"]: c for c in s["changes"]}
+        result = generate_commit_message(repo, [by_path[path] for path in scope], s["repository"]["head"],
+                                         staged=staged, locale=locale, merging=s["operation"] == "merge")
+        if status(repo)["fingerprint"] != s["fingerprint"]:
+            raise GitError(ui("生成说明期间仓库状态已变化，请刷新后重试。"))
+        if not result["message"]:
+            raise GitError(ui("所选文件没有可提交的改动，请刷新工作区。"))
+        return {**result, "repository": s["repository"], "action": "commit_message"}
 
     def prepare(self, repo, action, params, owner=""):
         if action not in ACTIONS or set(params) - FIELDS[action]:
@@ -282,30 +324,14 @@ class Operations:
             message = params.get("message")
             if not isinstance(message, str) or not message.strip() or len(message) > 10000 or "\0" in message:
                 raise GitError(ui("请输入提交说明（最多 10000 个字符）。"))
-            if s["conflict_count"]:
-                raise GitError(ui("请先解决冲突并暂存对应文件。"))
-            if operation == "revert":
-                raise GitError(ui("请使用「继续撤销」完成正在进行的操作。"))
-            if action == "commit_selected" and operation:
-                raise GitError(ui("请先完成当前 Git 操作，再提交所选文件。"))
-            if action == "commit" and not s["staged_count"] and operation != "merge":
-                raise GitError(ui("还没有暂存的更改。"))
+            files = commit_files(s, action, params.get("paths"))
             title = ui("提交到 ") + local
             detail = [ui("仅提交暂存区；未暂存文件保持原状。"), ui("提交说明：\n") + message.strip()]
-            files = [c["path"] for c in s["changes"] if c["staged"]]
             commands = [["commit", "--file=-"]]
             if action == "commit_selected":
-                paths = params.get("paths")
-                if (not isinstance(paths, list) or not 1 <= len(paths) <= 500
-                        or any(not isinstance(p, str) for p in paths) or len(set(paths)) != len(paths)):
-                    raise GitError(ui("请选择 1 至 500 个不同的文件。"))
-                available = {c["path"] for c in s["changes"] if c["operable"] and not c["conflict"]}
-                if not set(paths) <= available:
-                    raise GitError(ui("所选文件状态已变化或文件名无法处理，请刷新工作区。"))
-                files = paths
                 detail = [ui("将提交所选文件的全部当前改动；其他文件的暂存内容与工作区改动会保留。"),
                           ui("提交说明：\n") + message.strip()]
-                literals = [":(top,literal)" + p for p in paths]
+                literals = [":(top,literal)" + p for p in files]
                 commands = [["add", "--", *literals], ["commit", "--only", "--file=-", "--", *literals]]
         elif action == "stash":
             message = params.get("message", "")

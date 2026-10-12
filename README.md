@@ -130,8 +130,11 @@ The confirmation lists the repository, current branch and affected paths. Staged
 
 Every write operation first shows a concrete preview. Confirmation tokens expire after five minutes, and the plugin rechecks the repository state before execution. If the state changes, generate and confirm a new preview.
 
+![Editable draft generated for two C# files in a disposable demo repository](docs/screenshots/commit-message-draft-dark.jpg)
+
 - **Commit selected** includes every current change in the selected files while preserving other staged and unstaged files. The preview lists exact paths. If a hook fails, refresh to inspect the selected files' index state.
 - **Commit staged** includes only staged content, preserving unstaged edits in the same file. Both modes use your existing identity, credentials, hooks and signing configuration.
+- **Draft a message**: when the message is empty or whitespace-only, either commit button opens an editable local draft based on that commit's files, line changes, and recognized code symbols or configuration keys. No external AI service is called. Edit it, choose **Preview commit**, review the scope and message, then **Confirm commit**. Cancelling retains the draft. Large or numerous files are marked as partially summarized. Existing messages open the preview directly and remain editable; editing requires a refreshed preview before confirmation.
 - **Stash changes** can include untracked files. Applying requires a clean working tree, restores the index and retains the stash. Deletion previews identify the exact record.
 - **Discard** applies to unstaged changes. Partially staged files are restored to their index version. To discard staged edits, unstage them first.
 - **Untracked files** are backed up, then removed only at the exact paths listed in the preview. Ignored files are excluded; submodules, nested repositories and conflicted paths require separate handling.

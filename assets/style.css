@@ -76,6 +76,7 @@
 @media(max-width:480px){.operations-header{padding:13px 15px}.operations-body{padding:14px 15px}.operations-footer{padding:12px 15px}.work-toolbar{gap:5px}.work-toolbar .button{padding:6px 9px}.history-heading{padding-bottom:14px}.git-actions{gap:6px}.git-actions .button,.git-actions select{font-size:10px}.operation-result{padding-inline:15px}}
 
 .operations-modal .button.danger{background:var(--red);border-color:var(--red);color:var(--bg)}
+.operation-field .commit-message-editor{width:100%;box-sizing:border-box;font:inherit;font-size:12px;line-height:1.65;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:10px 12px;resize:vertical;min-height:148px;max-height:360px}.operation-field .commit-message-editor:focus{outline:2px solid var(--accent);outline-offset:1px}.operation-field .commit-message-editor:disabled{color:var(--muted);resize:none}
 
 /* Small, transparent scroll tracks match the surrounding Codex surface. */
 *::-webkit-scrollbar {width:8px;height:8px}
