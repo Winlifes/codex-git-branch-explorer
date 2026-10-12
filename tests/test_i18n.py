@@ -39,7 +39,7 @@ class LocalizationTests(unittest.TestCase):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "ui":
                     if isinstance(node.args[0], ast.Constant):
                         keys.add(node.args[0].value)
-        for name in ("app", "operations", "controls", "mcp-bridge"):
+        for name in ("app", "operations", "controls", "mcp-bridge", "workbench", "file-tree", "diff-view", "stashes"):
             source = (ROOT / f"assets/{name}.js").read_text()
             keys.update(json.loads(m) for m in re.findall(r'GitI18n\.t\(("(?:[^"\\]|\\.)*")', source))
         class Template(HTMLParser):

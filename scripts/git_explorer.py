@@ -107,7 +107,7 @@ class Repository:
         if not isinstance(ref, str) or len(ref) > 1024 or "\0" in ref:
             raise GitError(ui("无效的分支或提交。"))
         if ref != "HEAD" and not re.fullmatch(r"[0-9a-fA-F]{4,64}", ref):
-            if not ref.startswith(("refs/heads/", "refs/remotes/")):
+            if not ref.startswith(("refs/heads/", "refs/remotes/", "refs/tags/")):
                 raise GitError(ui("请选择完整分支引用或提交 SHA。"))
             if not self.git("show-ref", "--verify", "--hash", ref, optional=True):
                 raise GitError(ui("分支不存在，可能已被删除；请刷新分支列表。"))
@@ -151,7 +151,25 @@ class Repository:
             branches.insert(0, {"ref": info["current_ref"], "name": info["current_ref"].removeprefix("refs/heads/"),
                                 "sha": None, "date": "", "subject": ui("尚无提交"), "author": "",
                                 "upstream": "", "tracking": "", "remote": False, "current": True, "unborn": True})
-        return {"repository": info, "branches": branches}
+        tags = []
+        raw_tags = self.git("for-each-ref", "--sort=-creatordate", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(*objecttype)", "refs/tags/")
+        for row in raw_tags.split(b"\n"):
+            if not row:
+                continue
+            ref, sha, peeled, kind, peeled_kind = map(decode, row.split(b"\0"))
+            if kind == "commit" or peeled_kind == "commit":
+                tags.append({"ref": ref, "name": ref[len("refs/tags/"):], "sha": peeled or sha,
+                             "tag": True, "current": False, "remote": False, "tracking": "", "date": "", "subject": ""})
+        return {"repository": info, "branches": branches, "tags": tags}
+
+    def stashes(self):
+        raw = self.git("stash", "list", "--format=%H%x00%gd%x00%gs%x00%ci")
+        items = []
+        for row in raw.split(b"\n"):
+            if row:
+                sha, ref, subject, date = map(decode, row.split(b"\0", 3))
+                items.append({"sha": sha, "ref": ref, "subject": subject, "date": date})
+        return {"repository": self.info(), "stashes": items}
 
     @staticmethod
     def parse_commits(raw):
@@ -357,6 +375,11 @@ class Handler(BaseHTTPRequestHandler):
                   "operations.js": ("operations.js", "text/javascript; charset=utf-8"),
                   "controls.js": ("controls.js", "text/javascript; charset=utf-8"),
                   "branch-tree.js": ("branch-tree.js", "text/javascript; charset=utf-8"),
+                  "commit-graph.js": ("commit-graph.js", "text/javascript; charset=utf-8"),
+                  "file-tree.js": ("file-tree.js", "text/javascript; charset=utf-8"),
+                  "diff-view.js": ("diff-view.js", "text/javascript; charset=utf-8"),
+                  "workbench.js": ("workbench.js", "text/javascript; charset=utf-8"),
+                  "stashes.js": ("stashes.js", "text/javascript; charset=utf-8"),
                   "i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
                   "locales/en.js": ("locales/en.json", "text/javascript; charset=utf-8"),
                   "style.css": ("style.css", "text/css; charset=utf-8")}
@@ -384,6 +407,14 @@ class Handler(BaseHTTPRequestHandler):
                 value = repo.commit(get("sha"), get("parent", "0"))
             elif path == "api/patch":
                 value = repo.patch(get("sha"), get("path"), get("parent", "0"))
+            elif path == "api/status":
+                from git_operations import status
+                value = status(repo)
+            elif path == "api/stashes":
+                value = repo.stashes()
+            elif path == "api/working_patch":
+                from git_operations import working_patch
+                value = working_patch(repo, get("path"), get("staged") == "true")
             else:
                 self.send(404, {"error": ui("接口不存在。")})
                 return

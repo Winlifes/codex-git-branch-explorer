@@ -1,5 +1,12 @@
 # Screenshot capture notes / 截图来源
 
+`workbench-ui-fix-dark.jpg` shows the v0.5.1 alignment and contrast fixes, captured on 2026-10-12 at the default 1280 × 720 viewport in the same local MCP development host and disposable `orbit-studio` repository. It shows mixed folder selection, aligned checkboxes and readable enabled/disabled commit actions. Selecting files and entering the example message did not stage or commit any changes.
+
+v0.5.0 workbench captures were taken on 2026-10-12 from a local MCP development host connected to the actual Python service and the disposable Unity demo repository `orbit-studio`. These are direct 1280 × 720 captures, without image modification or the surrounding Codex window. No private project data is included.
+
+- `workbench-log-dark.jpg`: compact commit graph, branch/tag folders and persistent file details.
+- `workbench-commit-dark.jpg`: folder/file selection, bottom composer and side-by-side working-tree diff.
+
 Captured at the default 1280 × 720 browser viewport. Branch folder screenshots show v0.4.0 (2026-09-22), history screenshots show v0.3.0 (2026-09-16), and the other screenshots show v0.2.1 (2026-09-16).
 
 These are unedited captures of the running plugin panel. A local MCP development host rendered the bundled panel HTML and connected it to the plugin's actual Python MCP server and Git implementation. The surrounding Codex application window is not included.

@@ -70,6 +70,92 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(status(self.repo)["staged_count"], 0)
         self.assertTrue(all((self.path / p).read_text() == "literal\n" for p in paths))
 
+    def test_selected_commit_preserves_unselected_staged_and_unstaged_changes(self):
+        self.file("tracked.txt", "selected current content\n")
+        self.file("other.txt", "staged version\n")
+        self.apply("stage", paths=["other.txt"])
+        self.file("other.txt", "unstaged version\n")
+        self.file(":(glob)*.txt", "literal new file\n")
+        index = (self.path / ".git/index").read_bytes()
+        plan = self.ops.prepare(self.repo, "commit_selected", {"paths": ["tracked.txt", ":(glob)*.txt"], "message": "Selected"}, "task-a")
+        self.assertEqual(index, (self.path / ".git/index").read_bytes())
+        self.assertEqual(plan["files"], ["tracked.txt", ":(glob)*.txt"])
+        result = self.ops.apply(self.repo, plan["token"], "task-a")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.git("show", "HEAD:tracked.txt"), "selected current content")
+        self.assertEqual(self.git("show", "HEAD::(glob)*.txt"), "literal new file")
+        self.assertNotIn("other.txt", self.git("ls-tree", "--name-only", "HEAD"))
+        self.assertEqual(self.git("show", ":other.txt"), "staged version")
+        self.assertEqual((self.path / "other.txt").read_text(), "unstaged version\n")
+        head = self.git("rev-parse", "HEAD")
+        self.assertTrue(self.ops.apply(self.repo, plan["token"], "task-a")["ok"])
+        self.assertEqual(head, self.git("rev-parse", "HEAD"))
+
+    def test_selected_commit_rechecks_file_content_and_rejects_invalid_paths(self):
+        self.file("tracked.txt", "preview\n")
+        plan = self.ops.prepare(self.repo, "commit_selected", {"paths": ["tracked.txt"], "message": "Selected"})
+        self.file("tracked.txt", "changed after preview\n")
+        with self.assertRaises(GitError):
+            self.ops.apply(self.repo, plan["token"])
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
+        for paths in [[], ["missing"], ["../outside"], ["tracked.txt", "tracked.txt"], [4]]:
+            with self.subTest(paths=paths), self.assertRaises(GitError):
+                self.ops.prepare(self.repo, "commit_selected", {"paths": paths, "message": "Selected"})
+
+    def test_selected_commit_can_make_initial_commit_and_record_deletions(self):
+        (self.path / "tracked.txt").unlink()
+        self.apply("commit_selected", paths=["tracked.txt"], message="Delete selected")
+        self.assertNotIn("tracked.txt", self.git("ls-tree", "--name-only", "HEAD"))
+        empty = self.root / "empty"
+        empty.mkdir(); self.git("init", "-b", "main", path=empty)
+        (empty / "new.txt").write_text("first\n")
+        repo = Repository(empty)
+        plan = self.ops.prepare(repo, "commit_selected", {"paths": ["new.txt"], "message": "First"})
+        result = self.ops.apply(repo, plan["token"])
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.git("show", "HEAD:new.txt", path=empty), "first")
+
+    def test_stash_roundtrip_preserves_index_untracked_files_and_original_record(self):
+        self.file("tracked.txt", "staged\n")
+        self.apply("stage", paths=["tracked.txt"])
+        self.file("tracked.txt", "working\n")
+        self.file("new.txt", "untracked\n")
+        self.apply("stash", message="Panel stash", include_untracked=True)
+        self.assertTrue(status(self.repo)["clean"])
+        item = self.repo.stashes()["stashes"][0]
+        self.assertIn("Panel stash", item["subject"])
+        self.apply("stash_apply", sha=item["sha"])
+        self.assertEqual(self.git("show", ":tracked.txt"), "staged")
+        self.assertEqual((self.path / "tracked.txt").read_text(), "working\n")
+        self.assertEqual((self.path / "new.txt").read_text(), "untracked\n")
+        self.assertEqual(len(self.repo.stashes()["stashes"]), 1)
+        self.apply("stash_drop", sha=item["sha"])
+        self.assertEqual(self.repo.stashes()["stashes"], [])
+
+    def test_stash_can_leave_untracked_files_and_rejects_dirty_apply(self):
+        self.file("tracked.txt", "working\n"); self.file("new.txt", "leave me\n")
+        self.apply("stash", message="Tracked only", include_untracked=False)
+        self.assertEqual((self.path / "new.txt").read_text(), "leave me\n")
+        self.assertEqual((self.path / "tracked.txt").read_text(), "base\n")
+        item = self.repo.stashes()["stashes"][0]
+        with self.assertRaises(GitError):
+            self.ops.prepare(self.repo, "stash_apply", {"sha": item["sha"]})
+        for params in [{"include_untracked": "yes"}, {"message": "bad\0text"}, {"command": "anything"}]:
+            with self.subTest(params=params), self.assertRaises(GitError):
+                self.ops.prepare(self.repo, "stash", params)
+
+    def test_stash_preview_detects_reflog_changes_even_when_tip_stays_the_same(self):
+        self.file("tracked.txt", "first\n"); self.apply("stash", message="First")
+        self.file("tracked.txt", "second\n"); self.apply("stash", message="Second")
+        item = self.repo.stashes()["stashes"][0]
+        plan = self.ops.prepare(self.repo, "stash_drop", {"sha": item["sha"]})
+        tip = self.git("rev-parse", "refs/stash")
+        self.git("stash", "drop", "stash@{1}")
+        self.assertEqual(self.git("rev-parse", "refs/stash"), tip)
+        with self.assertRaises(GitError):
+            self.ops.apply(self.repo, plan["token"])
+        self.assertEqual(self.repo.stashes()["stashes"][0]["sha"], item["sha"])
+
     def test_commit_only_staged_content_uses_user_config_and_no_duplicate(self):
         self.file("tracked.txt", "staged content\n")
         self.apply("stage", paths=["tracked.txt"])

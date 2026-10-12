@@ -19,11 +19,13 @@ from urllib.parse import urlsplit, urlunsplit
 from git_explorer import GitError, Repository, decode, MAX_PATCH
 from worktree_discard import prepare_discard, create_backup, remove_untracked
 
-ACTIONS = ("switch", "create", "stage", "unstage", "discard", "commit", "fetch", "pull", "push",
-           "merge", "revert", "delete", "continue", "abort")
+ACTIONS = ("switch", "create", "stage", "unstage", "discard", "commit", "commit_selected", "fetch", "pull", "push",
+           "merge", "revert", "delete", "continue", "abort", "stash", "stash_apply", "stash_drop")
 FIELDS = {
     "switch": {"ref"}, "create": {"ref", "name", "checkout"},
     "stage": {"paths"}, "unstage": {"paths"}, "discard": {"paths", "all"}, "commit": {"message"},
+    "commit_selected": {"paths", "message"},
+    "stash": {"message", "include_untracked"}, "stash_apply": {"sha"}, "stash_drop": {"sha"},
     "fetch": {"remote"}, "pull": {"remote", "branch"},
     "push": {"remote", "branch", "set_upstream"}, "merge": {"ref"},
     "revert": {"sha", "mainline"}, "delete": {"ref"}, "continue": set(), "abort": set(),
@@ -146,6 +148,7 @@ def status(repo):
             upstream = {"remote": decode(r).strip(), "ref": decode(b).strip()}
     digest = hashlib.sha256(raw)
     digest.update(repo.git("for-each-ref", "--format=%(refname)%00%(objectname)"))
+    digest.update(repo.git("stash", "list", "--format=%H%x00%gd"))
     digest.update(json.dumps([info, stat_data, remotes, upstream, operation], sort_keys=True).encode())
     for name in ("index", "config", "MERGE_HEAD", "REVERT_HEAD", "MERGE_MSG", "sequencer/todo"):
         path = git_path(repo, name)
@@ -203,10 +206,10 @@ class Operations:
             raise GitError(ui("请先完成或中止当前 Git 操作。"))
         if operation not in (None, "merge", "revert"):
             raise GitError(ui("当前有未完成的 ") + operation + ui("，请在终端处理后刷新。"))
-        if action in {"switch", "pull", "merge", "revert"} or (action == "create" and params.get("checkout", True)):
+        if action in {"switch", "pull", "merge", "revert", "stash_apply"} or (action == "create" and params.get("checkout", True)):
             if not s["clean"]:
                 raise GitError(ui("当前工作区有未提交的更改，请先提交后再执行此操作。"))
-        if action in {"commit", "push", "pull", "merge", "revert"} and not info["current_ref"]:
+        if action in {"commit", "commit_selected", "push", "pull", "merge", "revert"} and not info["current_ref"]:
             raise GitError(ui("当前是游离 HEAD，请先创建并切换到本地分支。"))
         local = info["current_ref"].removeprefix("refs/heads/") if info["current_ref"] else ui("游离 HEAD")
         title, detail, commands, files = "", [], [], []
@@ -275,7 +278,7 @@ class Operations:
             if discard["tracked"]:
                 commands = [["--no-optional-locks", "--literal-pathspecs", "restore", "--worktree",
                              "--no-recurse-submodules", "--pathspec-from-file=-", "--pathspec-file-nul"]]
-        elif action == "commit":
+        elif action in {"commit", "commit_selected"}:
             message = params.get("message")
             if not isinstance(message, str) or not message.strip() or len(message) > 10000 or "\0" in message:
                 raise GitError(ui("请输入提交说明（最多 10000 个字符）。"))
@@ -283,12 +286,50 @@ class Operations:
                 raise GitError(ui("请先解决冲突并暂存对应文件。"))
             if operation == "revert":
                 raise GitError(ui("请使用「继续撤销」完成正在进行的操作。"))
-            if not s["staged_count"] and operation != "merge":
+            if action == "commit_selected" and operation:
+                raise GitError(ui("请先完成当前 Git 操作，再提交所选文件。"))
+            if action == "commit" and not s["staged_count"] and operation != "merge":
                 raise GitError(ui("还没有暂存的更改。"))
             title = ui("提交到 ") + local
             detail = [ui("仅提交暂存区；未暂存文件保持原状。"), ui("提交说明：\n") + message.strip()]
             files = [c["path"] for c in s["changes"] if c["staged"]]
             commands = [["commit", "--file=-"]]
+            if action == "commit_selected":
+                paths = params.get("paths")
+                if (not isinstance(paths, list) or not 1 <= len(paths) <= 500
+                        or any(not isinstance(p, str) for p in paths) or len(set(paths)) != len(paths)):
+                    raise GitError(ui("请选择 1 至 500 个不同的文件。"))
+                available = {c["path"] for c in s["changes"] if c["operable"] and not c["conflict"]}
+                if not set(paths) <= available:
+                    raise GitError(ui("所选文件状态已变化或文件名无法处理，请刷新工作区。"))
+                files = paths
+                detail = [ui("将提交所选文件的全部当前改动；其他文件的暂存内容与工作区改动会保留。"),
+                          ui("提交说明：\n") + message.strip()]
+                literals = [":(top,literal)" + p for p in paths]
+                commands = [["add", "--", *literals], ["commit", "--only", "--file=-", "--", *literals]]
+        elif action == "stash":
+            message = params.get("message", "")
+            include = params.get("include_untracked", True)
+            if not isinstance(message, str) or len(message) > 10000 or "\0" in message or type(include) is not bool:
+                raise GitError(ui("无效的储藏参数。"))
+            files = [c["path"] for c in s["changes"] if include or not c["untracked"]]
+            if not files or s["conflict_count"] or not info["head"]:
+                raise GitError(ui("没有可储藏的修改，或工作区仍有冲突。"))
+            if any(not c["operable"] for c in s["changes"]):
+                raise GitError(ui("所选文件状态已变化或文件名无法处理，请刷新工作区。"))
+            title = ui("储藏工作区修改")
+            detail = [ui("当前分支：") + local, ui("保存工作区和暂存区的改动，随后清理已储藏的文件。"),
+                      ui("包含未跟踪文件。") if include else ui("未跟踪文件会留在工作区。")]
+            commands = [["stash", "push", *(["--include-untracked"] if include else []), "--message", message.strip() or "Git Branch Explorer stash"]]
+        elif action in {"stash_apply", "stash_drop"}:
+            item = next((item for item in repo.stashes()["stashes"] if item["sha"] == params.get("sha")), None)
+            if not item:
+                raise GitError(ui("储藏记录已变化，请刷新后重新选择。"))
+            title = ui("应用储藏") if action == "stash_apply" else ui("删除储藏")
+            detail = [item["ref"] + " · " + item["subject"],
+                      ui("恢复工作区与暂存区的改动，保留原储藏记录。如有冲突，请在工作区处理。") if action == "stash_apply" else
+                      ui("此操作会删除所选储藏记录，请确认其中的修改已经保留。")]
+            commands = [["stash", "apply", "--index", item["sha"]] if action == "stash_apply" else ["stash", "drop", item["ref"]]]
         elif action in {"fetch", "pull", "push"}:
             remote = next((r for r in s["remotes"] if r["name"] == params.get("remote")), None)
             if not remote:
@@ -359,7 +400,7 @@ class Operations:
                                  "fingerprint": s["fingerprint"], "commands": commands,
                                  "discard": discard,
                                  "input": (b"".join(p.encode("utf-8") + b"\0" for p in discard["tracked"]) if discard else
-                                           params.get("message", "").strip().encode() if action == "commit" else None),
+                                           params.get("message", "").strip().encode() if action in {"commit", "commit_selected"} else None),
                                  "preview": preview}
         return preview
 

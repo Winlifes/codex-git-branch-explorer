@@ -8,7 +8,9 @@ Browse Git branches, commit history and file diffs in the Codex right panel. Man
 
 ![English UI: branch folders, current branch and commit history](docs/screenshots/branch-folders-en.jpg)
 
-*Real captures from the disposable `orbit-notes` repository in a local MCP development host, without the surrounding Codex window. The branch folder screenshots show v0.4.0 in English and Chinese; the other examples below show v0.2.1. The panel follows the Codex language automatically.*
+*The v0.5.0 workbench captures use the disposable Unity demo repository `orbit-studio` in a local MCP development host. Older captures remain below for reference. The panel follows the Codex language automatically.*
+
+![Dark workbench: branch tree, commit graph and file details](docs/screenshots/workbench-log-dark.jpg)
 
 This is an independently developed, third-party plugin distributed through this repository. It is not currently listed in the official OpenAI plugin directory. Installation does not modify the Codex application.
 
@@ -19,9 +21,11 @@ This is an independently developed, third-party plugin distributed through this 
 | Area | What you can do |
 | --- | --- |
 | Branches | Browse local and remote-tracking branches in collapsible folders, search full branch paths, identify the current branch and see upstream ahead/behind status. |
-| History | Browse each branch's commits with pagination, search by message or author, and filter to the first-parent history. |
+| History | Compact commit rows with a colored topology graph, ref badges, authors, dates and hashes; pagination, search and first-parent filtering. |
 | Commit details | See the full message, author, SHA, date and time, added/deleted line counts, changed files and per-file diffs. Choose a parent for merge commit diffs. |
-| Working tree | Inspect staged and unstaged changes; stage or unstage one file or all files; commit the staged changes. |
+| Working tree | Persistent Commit tab with directory checkboxes, tracked/untracked groups, staging controls and a bottom composer; commit selected files or staged content. |
+| Stashes | Inspect saved changes, including untracked files; save working-tree changes, apply while retaining the record, or preview deleting a stash. |
+| Layout and diffs | Resizable branch/details panes, unified or side-by-side working diffs with line numbers, expanded history diffs and responsive narrow layouts. |
 | Discard changes | Discard one file's or all files' unstaged changes while preserving the index. Local backups are created before discarding. |
 | Branch operations | Create, switch and merge branches; revert commits with a new reverse commit; delete merged local branches. |
 | Remotes and conflicts | Fetch, pull with fast-forward only, push without force and set an upstream. Stage resolved conflicts, then continue or abort a merge/revert. |
@@ -112,7 +116,9 @@ The confirmation lists the repository, current branch and affected paths. Staged
 
 Every write operation first shows a concrete preview. Confirmation tokens expire after five minutes, and the plugin rechecks the repository state before execution. If the state changes, generate and confirm a new preview.
 
-- **Commits** include only staged changes. Git uses your existing identity, credentials, hooks and signing configuration.
+- **Commit selected** includes every current change in the selected files while preserving other staged and unstaged files. The preview lists exact paths. If a hook fails, refresh to inspect the selected files' index state.
+- **Commit staged** includes only staged content, preserving unstaged edits in the same file. Both modes use your existing identity, credentials, hooks and signing configuration.
+- **Stash changes** can include untracked files. Applying requires a clean working tree, restores the index and retains the stash. Deletion previews identify the exact record.
 - **Discard** applies to unstaged changes. Partially staged files are restored to their index version. To discard staged edits, unstage them first.
 - **Untracked files** are backed up, then removed only at the exact paths listed in the preview. Ignored files are excluded; submodules, nested repositories and conflicted paths require separate handling.
 - **Switch, merge, pull and revert** require a clean working tree. Pull is fast-forward only; branch deletion is limited to local branches merged into the current branch.
@@ -139,7 +145,7 @@ Run the test suite and build a portable release archive:
 
 ```sh
 python3 -m unittest discover -s tests -v
-node --test tests/branch-tree.test.cjs
+node --test tests/*.test.cjs
 python3 scripts/build_release.py
 ```
 
@@ -151,7 +157,7 @@ A standalone, read-only browser mode is also available for debugging:
 python3 scripts/git_explorer.py start --repo "/path/to/your/repository"
 ```
 
-It prints a temporary localhost URL. Git write controls require the MCP panel environment.
+It prints a temporary localhost URL. Browser mode can inspect the working tree and stashes; all write controls remain disabled. Git mutations require the MCP panel environment.
 
 ## Documentation and support
 

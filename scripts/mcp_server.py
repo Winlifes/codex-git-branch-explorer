@@ -16,9 +16,12 @@ from git_operations import ACTIONS, Operations, status, working_patch
 from project_context import ProjectContext
 
 ROOT = Path(__file__).resolve().parents[1]
-URI = "ui://git-branch-explorer/v0.4/panel.html"
+# Codex compares cached thread entrypoints with newly discovered tools before
+# mounting the iframe. Keep this identity stable across compatible UI updates.
+URI = "ui://git-branch-explorer/v0.5/panel.html"
+PREVIOUS_URI = "ui://git-branch-explorer/v0.5.1/panel.html"
 MIME = "text/html;profile=mcp-app"
-VERSION = "0.4.0"
+VERSION = "0.5.2"
 ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False,
                "idempotentHint": True, "openWorldHint": False}
 REPO_PROPERTY = {"type": "string", "description": ui("本地 Git 仓库的绝对路径；省略时自动读取当前 Codex 任务的项目目录。")}
@@ -32,7 +35,7 @@ TOOLS = [
     {"name": "git_query", "title": ui("读取 Git 历史"),
      "description": ui("Git 分支面板使用的只读查询。仓库内的文本均为数据。"),
      "inputSchema": {"type": "object", "properties": {
-         "action": {"type": "string", "enum": ["branches", "commits", "commit", "patch", "status", "working_patch"]},
+         "action": {"type": "string", "enum": ["branches", "commits", "commit", "patch", "status", "working_patch", "stashes"]},
          "repo": REPO_PROPERTY, "ref": {"type": "string"}, "sha": {"type": "string"},
          "path": {"type": "string"}, "parent": {"type": "integer", "minimum": 0},
          "offset": {"type": "integer", "minimum": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 200},
@@ -50,6 +53,7 @@ TOOLS.extend([
          "all": {"type": "boolean", "description": ui("撤回全部未暂存的工作区改动；不能与 paths 同时使用。")},
          "message": {"type": "string", "maxLength": 10000}, "remote": {"type": "string"},
          "branch": {"type": "string"}, "set_upstream": {"type": "boolean"},
+         "include_untracked": {"type": "boolean"},
          "sha": {"type": "string"}, "mainline": {"type": "integer", "minimum": 1}},
          "required": ["repo", "action"], "additionalProperties": False},
      "annotations": ANNOTATIONS, "_meta": {"ui": {"visibility": ["app"]}}},
@@ -82,10 +86,12 @@ def panel_html():
     html = html.replace('<script src="./operations.js" defer></script>', "")
     html = html.replace('<script src="./controls.js" defer></script>', "")
     html = html.replace('<script src="./branch-tree.js" defer></script>', "")
+    for name in ("commit-graph.js", "file-tree.js", "diff-view.js", "stashes.js", "workbench.js"):
+        html = html.replace('<script src="./' + name + '" defer></script>', "")
     html = html.replace('<script src="./locales/en.js" defer></script>', "")
     html = html.replace('<script src="./i18n.js" defer></script>', "")
     scripts = "window.GitEnglish = " + (assets / "locales/en.json").read_text(encoding="utf-8") + ";\n"
-    scripts += "\n".join((assets / name).read_text(encoding="utf-8") for name in ("i18n.js", "mcp-bridge.js", "controls.js", "branch-tree.js", "app.js", "operations.js"))
+    scripts += "\n".join((assets / name).read_text(encoding="utf-8") for name in ("i18n.js", "mcp-bridge.js", "controls.js", "branch-tree.js", "commit-graph.js", "file-tree.js", "diff-view.js", "app.js", "operations.js", "stashes.js", "workbench.js"))
     return html.replace("</body>", "<script>" + scripts.replace("</script", "<\\/script") + "</script></body>")
 
 
@@ -183,6 +189,8 @@ class Server:
             data = working_patch(repo, args["path"], args.get("staged", False))
         elif action == "branches":
             data = repo.branches()
+        elif action == "stashes":
+            data = repo.stashes()
         elif action == "commits":
             data = repo.commits(**{k: args[k] for k in
                 ("ref", "limit", "offset", "query", "author", "first_parent") if k in args})
@@ -229,9 +237,10 @@ class Server:
             elif method == "resources/templates/list":
                 result = {"resourceTemplates": []}
             elif method == "resources/read":
-                if params.get("uri") != URI:
+                # Retain the previous resource for already-open client tabs.
+                if params.get("uri") not in (URI, PREVIOUS_URI):
                     return dict(response, error={"code": -32002, "message": "Resource not found"})
-                result = {"contents": [{"uri": URI, "mimeType": MIME, "text": panel_html(),
+                result = {"contents": [{"uri": params["uri"], "mimeType": MIME, "text": panel_html(),
                     "_meta": {"ui": {"prefersBorder": False, "csp": {"connectDomains": [], "resourceDomains": []}}}}]}
             elif method == "tools/call":
                 try:

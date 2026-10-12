@@ -116,3 +116,13 @@ test("empty repos and detached HEAD remain browsable without inventing path comp
   assert.equal(local.children[0].branch, head);
   assert.deepEqual(ancestors(head), [folderId("local")]);
 });
+
+test("tags preserve their full identity and form a separate searchable group", () => {
+  const tag = {...branch("release/v1.0"), ref: "refs/tags/release/v1.0", tag: true};
+  const groups = build([branch("release/v1.0"), tag]);
+  assert.deepEqual(groups.map(group => group.group), ["local", "tags"]);
+  assert.equal(groups[1].children[0].children[0].branch, tag);
+  assert.notEqual(groups[0].children[0].id, groups[1].children[0].id);
+  assert.equal(flatten(build([tag], "V1.0"))[0].branch.ref, tag.ref);
+  assert.deepEqual(build([tag], "", "local"), []);
+});
