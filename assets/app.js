@@ -598,6 +598,7 @@ function showRepositoryPicker(data = null) {
   }
   $("repo-picker").hidden = false;
   $("cancel-repo").hidden = !state.repository;
+  window.GitGithub?.context(data);
   if (data?.context) $("recheck-context").focus(); else $("repo-input").focus();
 }
 $("recheck-context").addEventListener("click", async () => {

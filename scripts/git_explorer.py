@@ -380,6 +380,7 @@ class Handler(BaseHTTPRequestHandler):
                   "diff-view.js": ("diff-view.js", "text/javascript; charset=utf-8"),
                   "workbench.js": ("workbench.js", "text/javascript; charset=utf-8"),
                   "stashes.js": ("stashes.js", "text/javascript; charset=utf-8"),
+                  "github.js": ("github.js", "text/javascript; charset=utf-8"),
                   "i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
                   "locales/en.js": ("locales/en.json", "text/javascript; charset=utf-8"),
                   "style.css": ("style.css", "text/css; charset=utf-8")}

@@ -1,5 +1,7 @@
 # Screenshot capture notes / 截图来源
 
+`github-create-dark.jpg` shows v0.6.0 on 2026-10-12 at the default 857 × 984 viewport. The local MCP development host uses the actual panel and Python preview implementation, a disposable `Orbit Starter` project, and a simulated GitHub account `demo-user`. The host explicitly disables GitHub creation. The image is unedited and shows account confirmation, private-by-default visibility, ignore rules, and optional initial upload. No real GitHub repository was created.
+
 `workbench-ui-fix-dark.jpg` shows the v0.5.1 alignment and contrast fixes, captured on 2026-10-12 at the default 1280 × 720 viewport in the same local MCP development host and disposable `orbit-studio` repository. It shows mixed folder selection, aligned checkboxes and readable enabled/disabled commit actions. Selecting files and entering the example message did not stage or commit any changes.
 
 v0.5.0 workbench captures were taken on 2026-10-12 from a local MCP development host connected to the actual Python service and the disposable Unity demo repository `orbit-studio`. These are direct 1280 × 720 captures, without image modification or the surrounding Codex window. No private project data is included.

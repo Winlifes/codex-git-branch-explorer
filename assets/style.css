@@ -371,3 +371,19 @@ input[type=checkbox]:indeterminate::after{content:"";display:block;width:8px;hei
   .diff-dialog{width:calc(100vw - 20px);height:calc(100dvh - 30px);max-height:calc(100dvh - 30px)}
 }
 @media(max-width:430px){.search-row{flex-wrap:wrap}.search-row input:first-child{flex:auto;width:100%}.search-row input:nth-child(2){flex:1}.statusbar #status-selection{display:none}.brand #repo-name{max-width:100px}}
+/* Creating a GitHub project: keep account, visibility and upload choices legible. */
+.github-start{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px;border:1px solid var(--line);border-radius:12px;margin:24px 0;background:var(--surface)}
+.github-start strong{display:block;font-size:16px}.github-start p{margin:8px 0 0;line-height:1.6;color:var(--muted)}.github-start .button{flex-shrink:0}
+.github-modal{width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
+.github-modal .operations-header>div{min-width:0}.github-modal .operations-header p{font-size:12px;overflow-wrap:anywhere;margin:6px 0 0}
+.github-account{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:16px;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}.github-account strong{font-size:18px;color:var(--text)}
+.github-account-help{font-size:12px;margin:0 0 20px;color:var(--muted)}.github-account-help summary,.github-excluded summary{cursor:pointer;padding:6px 0}
+.github-command{display:block;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.6}
+.github-link{display:inline-block;color:var(--accent);margin:8px 0;text-decoration:underline;text-underline-offset:3px}
+.github-visibility{border:0;padding:0;margin:20px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}.github-visibility legend{margin-bottom:10px;font-size:13px}
+.github-visibility-option{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line);border-radius:8px;padding:14px;cursor:pointer;min-width:0}.github-visibility-option:has(input:checked){border-color:var(--accent);background:var(--tint)}
+.github-visibility-option input{margin:2px 0 0;flex-shrink:0;accent-color:var(--accent);width:16px;height:16px}.github-visibility-option strong,.github-visibility-option span span{display:block}.github-visibility-option strong{font-size:14px}.github-visibility-option span span{font-size:12px;line-height:1.5;margin-top:6px}
+.github-preview-target{display:flex;justify-content:space-between;gap:16px;border:1px solid var(--line);border-radius:8px;padding:16px;overflow-wrap:anywhere;margin-bottom:16px}.github-preview-target[data-visibility="public"]{border-color:var(--accent)}
+.github-excluded{margin:16px 0;font-size:12px}.github-excluded code{display:block;overflow-wrap:anywhere;padding:4px 0}.github-job-state{font-size:16px;font-weight:600;line-height:1.6}.github-job-steps{padding-left:24px;line-height:2}
+.github-modal #github-content>.muted{font-size:12px;line-height:1.6;margin:8px 0 16px}
+@media(max-width:520px){.github-start{align-items:stretch;flex-direction:column}.github-visibility{grid-template-columns:1fr}.github-modal .operations-footer{gap:8px}.github-modal .operations-footer .button{padding:10px 12px}}

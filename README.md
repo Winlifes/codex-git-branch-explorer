@@ -29,6 +29,7 @@ This is an independently developed, third-party plugin distributed through this 
 | Discard changes | Discard one file's or all files' unstaged changes while preserving the index. Local backups are created before discarding. |
 | Branch operations | Create, switch and merge branches; revert commits with a new reverse commit; delete merged local branches. |
 | Remotes and conflicts | Fetch, pull with fast-forward only, push without force and set an upstream. Stage resolved conflicts, then continue or abort a merge/revert. |
+| New projects | Initialize a project without Git, confirm the GitHub account, choose private/public visibility and ignore rules, then create an empty repository or commit and upload reviewed files. |
 | Appearance | Follow the Codex theme or select light/dark mode, with themed menus, thin scrollbars and a branch drawer for narrow panels. |
 | Language | Follow the Codex language with English and Simplified Chinese UI, including menus, previews, errors, dates and number formatting. Live changes preserve drafts and selections. |
 
@@ -43,11 +44,24 @@ Branch names are grouped by `/`: `codex/card-collection` appears inside **codex*
 - Search matches the full branch name and temporarily expands matching paths. Clearing the search restores your previous folder state.
 - Use **↑/↓** to move, **→/←** to expand or collapse and move between levels, **Home/End** to jump, and **Enter/Space** to open a folder or browse a branch. Hover a branch to see its full name.
 
+## Create a GitHub repository for a new project
+
+When the current project is not a Git repository, choose **Create GitHub repository** in the empty-state page. Confirm the account, repository name, description, visibility (private by default), initial branch, ignore rules, and whether to upload an initial commit. Existing `.gitignore` content is retained. Common, Unity, Node.js, and Python templates are available.
+
+![Creation form with a demo account and private visibility selected by default](docs/screenshots/github-create-dark.jpg)
+
+The preview shows the target account/repository and exact upload paths. Public uploads require an explicit confirmation of the listed files. Common credential filenames, symlinks, and nested repositories are excluded from this initial upload; this is not a full secret-content scan. Files at or above 100 MiB are blocked before initialization. Only reviewed files are staged; the user's Git author identity, signing, and hooks remain in use.
+
+This optional feature needs the official [GitHub CLI](https://cli.github.com/), signed in with [gh auth login](https://cli.github.com/manual/gh_auth_login). The panel detects missing or expired authentication and provides the command to run. Account switching requires a new confirmation. The plugin never accepts or displays account tokens.
+
+Creation progress is shown while it runs. Completed local/remote steps are retained after a failure; the plugin never automatically repeats a creation request or deletes the new repository. On success, `origin` is connected and the optional initial upload sets the upstream branch. A GitHub CLI credential helper is configured only in the new repository for subsequent fetch/pull/push operations. The new repository opens in the Git panel. If only an empty repository was requested, no project files are staged, committed, or pushed.
+
 ## Install
 
 ### Requirements
 
 - Git and Python **3.9+**.
+- Optional: GitHub CLI for creating new GitHub repositories. Existing Git workflows do not need it.
 - Codex Desktop with support for **MCP thread entrypoints**. Validated on macOS with the desktop-bundled Codex CLI `0.154.0-alpha.6.2`; other versions and platforms have not been verified.
 
 No third-party Python packages, npm, API key or developer-hosted cloud service are required.

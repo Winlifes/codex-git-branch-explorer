@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 — 2026-10-12
+
+- Add creation of GitHub repositories from projects without Git: account confirmation, private/public visibility, name/description, initial branch, ignore templates, and optional first commit/upload.
+- Preview exact upload paths, retain existing ignore rules, exclude common credential files, links and nested repositories from initial upload, and reject oversized files before initialization.
+- Recheck account, Git identity and files before applying; bind short-lived previews and progress jobs to the calling task. Show completed steps after failures without automatic retries or deletion.
+- Use the official GitHub CLI for authentication/API requests and a repository-local credential helper for initial and subsequent Git operations; keep tokens out of the panel and retain existing signing/hooks.
+
 ## 0.5.2 — 2026-10-12
 
 - Show a stash's index, working-tree and untracked snapshots separately, so index-only changes and different staged/unstaged versions of one file remain inspectable before applying or deleting a stash.
