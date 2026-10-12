@@ -24,7 +24,7 @@ This is an independently developed, third-party plugin distributed through this 
 | History | Compact commit rows with a colored topology graph, ref badges, authors, dates and hashes; pagination, search and first-parent filtering. |
 | Commit details | See the full message, author, SHA, date and time, added/deleted line counts, changed files and per-file diffs. Choose a parent for merge commit diffs. |
 | Working tree | Persistent Commit tab with directory checkboxes, tracked/untracked groups, staging controls and a bottom composer; commit selected files or staged content. |
-| Stashes | Inspect saved changes, including untracked files; save working-tree changes, apply while retaining the record, or preview deleting a stash. |
+| Stashes | Inspect staged, working-tree and untracked snapshots separately; save changes, apply while retaining the record, or preview deleting a stash. |
 | Layout and diffs | Resizable branch/details panes, unified or side-by-side working diffs with line numbers, expanded history diffs and responsive narrow layouts. |
 | Discard changes | Discard one file's or all files' unstaged changes while preserving the index. Local backups are created before discarding. |
 | Branch operations | Create, switch and merge branches; revert commits with a new reverse commit; delete merged local branches. |

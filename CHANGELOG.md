@@ -2,6 +2,7 @@
 
 ## 0.5.2 — 2026-10-12
 
+- Show a stash's index, working-tree and untracked snapshots separately, so index-only changes and different staged/unstaged versions of one file remain inspectable before applying or deleting a stash.
 - Restore the stable panel resource URI so cached project entrypoints match fresh tool discovery. A changed URI in v0.5.1 could cause Codex to revoke the iframe before loading it and leave the host spinner visible.
 - Keep the alignment and contrast improvements; retain the v0.5.1 resource as a readable alias.
 - Add regression coverage for resource identity compatibility with existing project tabs.

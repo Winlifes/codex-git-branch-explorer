@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const Graph = require("../assets/commit-graph.js");
 const Files = require("../assets/file-tree.js");
 const Diff = require("../assets/diff-view.js");
+const StashFiles = require("../assets/stashes.js");
 const commit = (sha, ...parents) => ({sha, parents});
 
 test("linear graph carries the same lane and stops at the root", () => {
@@ -67,4 +68,24 @@ test("split diff pairs replacements and leaves unmatched lines on their correct 
   assert.equal(rows[2].left.text, "-old 2"); assert.equal(rows[2].right, undefined);
   assert.equal(Diff.parse("+untracked first\n+second")[1].next, 2);
   assert.equal(Diff.parse("@@ -0,0 +1 @@\n+one line\n").length, 2);
+});
+
+test("index-only stash changes remain inspectable when the working tree equals HEAD", () => {
+  const groups = StashFiles.groups({sha:"working", files:[]},
+    {sha:"index", files:[{path:"tracked.txt", status:"M"}]}, null);
+  assert.deepEqual(groups.map(group => group.key), ["staged"]);
+  assert.equal(groups[0].files[0].path, "tracked.txt");
+  assert.equal(groups[0].files[0].source, "index");
+});
+
+test("stash snapshots keep overlapping paths and their distinct diff sources", () => {
+  const working = {sha:"working", files:[{path:"same.txt", status:"M"}]};
+  const staged = {sha:"index", files:[{path:"same.txt", status:"M"}]};
+  const untracked = {sha:"untracked", files:[{path:"new.txt", status:"A"}]};
+  const before = JSON.stringify([working, staged, untracked]);
+  const groups = StashFiles.groups(working, staged, untracked);
+  assert.deepEqual(groups.map(group => group.key), ["staged", "worktree", "untracked"]);
+  assert.deepEqual(groups.flatMap(group => group.files.map(file => file.source)), ["index", "working", "untracked"]);
+  assert.equal(groups[0].files[0].path, groups[1].files[0].path);
+  assert.equal(JSON.stringify([working, staged, untracked]), before);
 });

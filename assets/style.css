@@ -209,6 +209,8 @@ body[data-view="stashes"] .detail,body[data-view="stashes"] .detail-splitter{dis
 .stash-row strong{font-size:12px;font-weight:450;line-height:1.6;overflow-wrap:anywhere}.stash-ref{font:10px ui-monospace,monospace;color:var(--accent)}.stash-row time{font-size:10px;color:var(--muted)}
 .stash-detail{overflow:auto;min-width:0;min-height:0;background:var(--panel)}#stash-summary{padding:20px}#stash-summary h3{font-size:14px;line-height:1.7}#stash-summary p{font-size:10px;margin-top:6px}.stash-actions{display:flex;gap:7px;margin-top:13px}.stash-actions .button{font-size:11px}.stash-delete{color:var(--red)}
 #stash-files{padding:8px 15px;border-block:1px solid var(--line)}#stash-diff{margin:0;padding:15px 0;overflow:auto;font:11px/1.8 ui-monospace,SFMono-Regular,Consolas,monospace;min-height:0}
+.stash-file-group+.stash-file-group{margin-top:10px}.stash-file-group h4{margin:0 0 4px;font-size:11px;font-weight:500;color:var(--muted)}
+#stash-patch-title{display:block;padding:10px 15px;border-bottom:1px solid var(--line);font-size:11px;overflow-wrap:anywhere}
 .sidebar{padding:16px 11px 0;gap:13px}.side-heading{padding:0 3px}.side-heading h2{font-weight:550;font-size:12px}
 #branch-search{font-size:12px;padding:8px 9px;border-radius:5px;background:var(--bg)}
 .segments{border:0;background:transparent;padding:0;gap:4px}.segments button{padding:6px 0;font-size:11px}
