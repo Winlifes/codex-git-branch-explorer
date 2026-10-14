@@ -34,12 +34,12 @@ class LocalizationTests(unittest.TestCase):
     def test_catalog_covers_code_and_template_copy(self):
         catalog = json.loads((ROOT / "assets/locales/en.json").read_text())
         keys = set()
-        for name in ("git_explorer", "git_operations", "worktree_discard", "mcp_server"):
+        for name in ("git_explorer", "git_operations", "worktree_discard", "mcp_server", "github_setup", "commit_message"):
             for node in ast.walk(ast.parse((ROOT / f"scripts/{name}.py").read_text())):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "ui":
                     if isinstance(node.args[0], ast.Constant):
                         keys.add(node.args[0].value)
-        for name in ("app", "operations", "controls", "mcp-bridge", "workbench", "file-tree", "diff-view", "stashes"):
+        for name in ("app", "operations", "controls", "mcp-bridge", "workbench", "file-tree", "diff-view", "stashes", "github"):
             source = (ROOT / f"assets/{name}.js").read_text()
             keys.update(json.loads(m) for m in re.findall(r'GitI18n\.t\(("(?:[^"\\]|\\.)*")', source))
         class Template(HTMLParser):

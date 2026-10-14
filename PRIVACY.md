@@ -1,6 +1,6 @@
 # 数据与隐私 / Privacy
 
-生效日期：2026-09-15。维护者：[Winlifes](https://github.com/Winlifes)。适用于本仓库发布的 Git 分支浏览器本地插件。
+生效日期：2026-10-12。维护者：[Winlifes](https://github.com/Winlifes)。适用于本仓库发布的 Git 分支浏览器本地插件。
 
 ## 插件读取的数据
 
@@ -8,11 +8,17 @@
 
 这些查询结果经本地 MCP 传给 Codex 宿主及插件面板。本地运行不表示数据不会传给 Codex；Codex 对数据的处理由用户与 OpenAI 的设置和条款决定。
 
+提交说明为空时，草稿生成会读取本次提交范围内的本地文件或暂存区对象，提取文件变化、增删行与可识别的符号名称。生成在本地完成，不调用外部 AI 服务；草稿及编辑结果通过 MCP 传给面板。只有确认提交后才写入 Git 提交信息；确认推送后提交信息会随提交发送到远程仓库。
+
 ## 网络与第三方
 
 本插件没有维护者运营的云端数据服务、遥测或分析追踪。面板使用随插件提供的资源。原生模式无需 HTTP 端口。
 
 用户确认获取、拉取或推送后，Git 会连接所选仓库中已经配置的远程地址。远程服务可接收相应 Git 数据及认证请求。插件使用已有 Git 凭据、签名和钩子配置；这些辅助程序由本机配置决定。
+
+打开「创建 GitHub 仓库」时，官方 GitHub CLI 会向 GitHub 查询已登录账号；创建预览还会查询目标仓库名是否已存在。插件只将账号名、公开显示名称及账号 ID 传给面板，不接收或显示账号令牌。登录凭据由 GitHub CLI 管理。
+
+用户确认创建后，GitHub 接收仓库名称、描述和可见性。选择首次上传时，Git 会将预览中的文件与首次提交发送给新建仓库；公开仓库的上传内容可供任何人查看。首次推送使用 GitHub CLI 的凭据辅助程序，以对应用户确认的账号。忽略规则和常见敏感文件名排除不能替代完整的密钥内容检查。
 
 从 GitHub 下载、克隆或提交问题时，GitHub 会按其自身服务规则处理这些交互。公开 Issue 中提交的内容会对外可见，请勿发送私有仓库内容或凭据。
 
@@ -31,5 +37,9 @@
 The plugin runs Git locally and reads the selected repository's paths, branches, commit metadata, file diffs, index and working tree. It also reads local Codex task/project metadata and message-presence flags to identify the active project, without reading message bodies.
 
 Query results are passed to the Codex host and panel through MCP. There is no maintainer-operated cloud service, telemetry or analytics. Confirmed Git remote operations use the repository's configured remotes and the user's Git credentials, hooks and signing settings.
+
+Empty-message drafts read local worktree files or index blobs within the intended commit scope, extracting file changes, line counts and recognizable names. Drafting is local and calls no external AI service. Drafts and edits pass through MCP to the panel. A message is saved to Git only after confirmation, and is sent to a remote together with the commit only after a confirmed push.
+
+Opening GitHub creation queries the signed-in account through the official GitHub CLI; preparing a creation checks whether the target name exists. Account tokens are neither accepted nor displayed by the plugin. After confirmation, GitHub receives the repository name, description, and visibility, plus the reviewed files and initial commit if upload was selected. Public repository content is visible to anyone. The initial push uses the GitHub CLI credential helper for the confirmed account. Filename exclusions are not a full secret-content scan.
 
 Discard operations create local backups under the worktree's Git metadata directory. These backups contain file data and paths, are not sent to the maintainer and are not deleted automatically. Users can restore or delete them manually. GitHub downloads and public issue submissions are handled by GitHub; never post private code or credentials in an issue.

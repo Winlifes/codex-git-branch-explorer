@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.1 — 2026-10-14
+
+- Allow fast-forward pulls with uncommitted changes when Git can retain them. Remove the blanket clean-worktree requirement for pull; keep preview confirmation and state-change checks.
+- Preview the presence of local changes and let Git reject tracked/untracked files that would be overwritten. Show the affected paths with guidance; report diverged history separately. Do not auto-stash, commit, discard or rebase local changes.
+
+## 0.7.0 — 2026-10-12
+
+- When a commit message is empty or whitespace-only, open an editable draft based on local file changes, line counts and recognized symbols/configuration keys. Selected-file drafts use the worktree; staged drafts use index blobs.
+- Keep edited messages and cancelled drafts. Re-preview after editing before applying a commit, and save the confirmed message through existing Git hooks/signing.
+- Bound content inspection for large changes and mark partial summaries; never call external AI services or stage/commit while generating drafts.
+
+## 0.6.0 — 2026-10-12
+
+- Add creation of GitHub repositories from projects without Git: account confirmation, private/public visibility, name/description, initial branch, ignore templates, and optional first commit/upload.
+- Preview exact upload paths, retain existing ignore rules, exclude common credential files, links and nested repositories from initial upload, and reject oversized files before initialization.
+- Recheck account, Git identity and files before applying; bind short-lived previews and progress jobs to the calling task. Show completed steps after failures without automatic retries or deletion.
+- Use the official GitHub CLI for authentication/API requests and a repository-local credential helper for initial and subsequent Git operations; keep tokens out of the panel and retain existing signing/hooks.
+
 ## 0.5.2 — 2026-10-12
 
 - Show a stash's index, working-tree and untracked snapshots separately, so index-only changes and different staged/unstaged versions of one file remain inspectable before applying or deleting a stash.
