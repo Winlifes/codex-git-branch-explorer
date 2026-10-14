@@ -594,5 +594,9 @@
   "编辑提交说明": "Edit commit message",
   "说明针对勾选文件的全部当前改动。": "The message covers all current changes in the selected files.",
   "说明针对已暂存的改动。": "The message covers staged changes.",
-  "未能生成草稿，可手动填写说明后预览提交。": "Could not generate a draft. Enter a message manually, then preview the commit."
+  "未能生成草稿，可手动填写说明后预览提交。": "Could not generate a draft. Enter a message manually, then preview the commit.",
+  "当前有 {count} 个未提交文件；Git 会检查本地修改，无法保留时停止拉取。": "There are {count} uncommitted files. Git will check local changes and stop if they cannot be retained.",
+  "不会自动储藏、提交或丢弃本地修改。": "Local changes will not be automatically stashed, committed or discarded.",
+  "拉取已停止，更新会覆盖下列本地文件。请先提交或储藏相关修改，再重试。\n": "Pull stopped because the update would overwrite the following local files. Commit or stash the affected changes, then try again.\n",
+  "拉取已停止，本地与远程分支已分叉。请先获取更新，再选择合并或在终端处理。\n": "Pull stopped because local and remote history have diverged. Fetch updates, then choose a merge or handle it in the terminal.\n"
 }

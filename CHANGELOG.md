@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 — 2026-10-14
+
+- Allow fast-forward pulls with uncommitted changes when Git can retain them. Remove the blanket clean-worktree requirement for pull; keep preview confirmation and state-change checks.
+- Preview the presence of local changes and let Git reject tracked/untracked files that would be overwritten. Show the affected paths with guidance; report diverged history separately. Do not auto-stash, commit, discard or rebase local changes.
+
 ## 0.7.0 — 2026-10-12
 
 - When a commit message is empty or whitespace-only, open an editable draft based on local file changes, line counts and recognized symbols/configuration keys. Selected-file drafts use the worktree; staged drafts use index blobs.

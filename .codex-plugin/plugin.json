@@ -1,6 +1,6 @@
 {
   "name": "git-branch-explorer",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "license": "MIT",
   "description": "Browse Git branches and history in the Codex side panel, with previews for commits, branch management and remote operations.",
   "author": {

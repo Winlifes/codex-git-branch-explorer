@@ -138,7 +138,8 @@ Every write operation first shows a concrete preview. Confirmation tokens expire
 - **Stash changes** can include untracked files. Applying requires a clean working tree, restores the index and retains the stash. Deletion previews identify the exact record.
 - **Discard** applies to unstaged changes. Partially staged files are restored to their index version. To discard staged edits, unstage them first.
 - **Untracked files** are backed up, then removed only at the exact paths listed in the preview. Ignored files are excluded; submodules, nested repositories and conflicted paths require separate handling.
-- **Switch, merge, pull and revert** require a clean working tree. Pull is fast-forward only; branch deletion is limited to local branches merged into the current branch.
+- **Pull** permits local changes and untracked files that Git can retain during a fast-forward update. Preview and confirm first. Git rejects files that would be overwritten, with the affected paths shown. There is no automatic stashing, committing, discarding or rebasing; diverged history still stops for separate handling.
+- **Switch, merge and revert** require a clean working tree; branch deletion is limited to local branches merged into the current branch.
 - **Revert** creates a reverse commit and preserves history. Hard reset, force push, force deletion and remote branch deletion are not available.
 
 Discard backups are stored under `codex-git-explorer/discard-backups/` inside the worktree's Git metadata directory. The result shows the actual location. Each backup's `manifest.json` maps original paths, file modes and symlink targets to the saved data. Backups are retained for manual recovery; they are not deleted automatically.

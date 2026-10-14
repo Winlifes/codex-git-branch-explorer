@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 URI = "ui://git-branch-explorer/v0.5/panel.html"
 PREVIOUS_URI = "ui://git-branch-explorer/v0.5.1/panel.html"
 MIME = "text/html;profile=mcp-app"
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False,
                "idempotentHint": True, "openWorldHint": False}
 REPO_PROPERTY = {"type": "string", "description": ui("本地 Git 仓库的绝对路径；省略时自动读取当前 Codex 任务的项目目录。")}

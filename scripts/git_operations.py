@@ -248,7 +248,7 @@ class Operations:
             raise GitError(ui("请先完成或中止当前 Git 操作。"))
         if operation not in (None, "merge", "revert"):
             raise GitError(ui("当前有未完成的 ") + operation + ui("，请在终端处理后刷新。"))
-        if action in {"switch", "pull", "merge", "revert", "stash_apply"} or (action == "create" and params.get("checkout", True)):
+        if action in {"switch", "merge", "revert", "stash_apply"} or (action == "create" and params.get("checkout", True)):
             if not s["clean"]:
                 raise GitError(ui("当前工作区有未提交的更改，请先提交后再执行此操作。"))
         if action in {"commit", "commit_selected", "push", "pull", "merge", "revert"} and not info["current_ref"]:
@@ -371,6 +371,9 @@ class Operations:
                 if action == "pull":
                     title = ui("拉取到 ") + local
                     detail += [ui("来源分支：") + dest.removeprefix("refs/heads/"), ui("仅快进更新；分叉时停止，交由你选择合并。")]
+                    if s["changes"]:
+                        detail.append(ui("当前有 {count} 个未提交文件；Git 会检查本地修改，无法保留时停止拉取。", count=len(s["changes"])))
+                        detail.append(ui("不会自动储藏、提交或丢弃本地修改。"))
                     commands = [["pull", "--ff-only", "--no-rebase", "--no-autostash", "--no-recurse-submodules", "--", name, dest]]
                 else:
                     if not info["head"]:
@@ -458,7 +461,13 @@ class Operations:
                     remove_untracked(repo, discard["untracked"], discard["signatures"])
                 result.update(ok=True, message=plan["preview"]["title"] + ui("，已完成。"), output=safe_output("\n".join(outputs)))
             except (GitError, OSError) as err:
-                result["message"] = safe_output(error_message(err))
+                diagnostic = safe_output(error_message(err))
+                result["message"] = diagnostic
+                if result["action"] == "pull":
+                    if "would be overwritten by merge" in diagnostic:
+                        result["message"] = ui("拉取已停止，更新会覆盖下列本地文件。请先提交或储藏相关修改，再重试。\n") + diagnostic
+                    elif "Not possible to fast-forward" in diagnostic:
+                        result["message"] = ui("拉取已停止，本地与远程分支已分叉。请先获取更新，再选择合并或在终端处理。\n") + diagnostic
             try:
                 result["status"] = status(repo)
                 if not result["ok"] and result["status"]["conflict_count"]:

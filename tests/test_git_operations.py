@@ -223,11 +223,11 @@ class OperationTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertTrue(self.git("branch", "--list", "linked"))
 
-    def test_dirty_worktree_blocks_switch_merge_pull_revert(self):
+    def test_dirty_worktree_blocks_switch_merge_revert(self):
         self.git("branch", "feature")
         self.file("untracked.txt", "keep\n")
         for action, params in [("switch", {"ref": "refs/heads/feature"}), ("merge", {"ref": "refs/heads/feature"}),
-                               ("pull", {"remote": "origin", "branch": "main"}), ("revert", {"sha": self.initial})]:
+                               ("revert", {"sha": self.initial})]:
             with self.subTest(action=action), self.assertRaisesRegex(GitError, "未提交"):
                 self.ops.prepare(self.repo, action, params)
         self.assertEqual((self.path / "untracked.txt").read_text(), "keep\n")
@@ -336,6 +336,105 @@ class OperationTests(unittest.TestCase):
         self.apply("pull", remote="origin", branch="main")
         self.assertEqual((self.path / "peer.txt").read_text(), "from remote\n")
         self.assertEqual(self.git("rev-parse", "HEAD"), self.git("rev-parse", "HEAD", path=peer))
+
+    def test_pull_retains_unrelated_unstaged_and_untracked_changes(self):
+        bare, peer = self.remote()
+        self.file("tracked.txt", "local pending\n")
+        self.file("untracked.txt", "local new file\n")
+        before = self.git("diff", "--cached")
+        preview = self.ops.prepare(self.repo, "pull", {"remote": "origin", "branch": "main"}, "task")
+        self.assertTrue(any("2 个未提交文件" in detail for detail in preview["details"]))
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
+        self.assertFalse((self.path / "peer.txt").exists())
+        result = self.ops.apply(self.repo, preview["token"], "task")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.git("rev-parse", "HEAD", path=peer))
+        self.assertEqual((self.path / "tracked.txt").read_text(), "local pending\n")
+        self.assertEqual((self.path / "untracked.txt").read_text(), "local new file\n")
+        self.assertEqual(self.git("diff", "--cached"), before)
+        self.assertEqual(self.git("stash", "list"), "")
+
+    def test_pull_retains_partial_staging_with_configured_autostash_and_rebase(self):
+        bare, peer = self.remote()
+        self.file("tracked.txt", "staged version\n"); self.git("add", "tracked.txt")
+        self.file("tracked.txt", "working version\n")
+        self.git("config", "pull.rebase", "true")
+        self.git("config", "rebase.autoStash", "true")
+        self.git("config", "merge.autoStash", "true")
+        self.apply("pull", remote="origin", branch="main")
+        self.assertEqual(self.git("show", ":tracked.txt"), "staged version")
+        self.assertEqual((self.path / "tracked.txt").read_text(), "working version\n")
+        self.assertEqual(self.git("stash", "list"), "")
+        self.assertIsNone(status(self.repo)["operation"])
+
+    def test_pull_rejects_overlapping_tracked_changes_without_losing_local_content(self):
+        bare, peer = self.remote()
+        (peer / "tracked.txt").write_text("remote version\n")
+        self.git("add", "tracked.txt", path=peer); self.git("commit", "-m", "Remote overlap", path=peer)
+        self.git("push", path=peer)
+        self.file("tracked.txt", "local version\n")
+        preview = self.ops.prepare(self.repo, "pull", {"remote": "origin", "branch": "main"})
+        result = self.ops.apply(self.repo, preview["token"])
+        self.assertFalse(result["ok"])
+        self.assertIn("拉取已停止", result["message"])
+        self.assertIn("tracked.txt", result["message"])
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
+        self.assertEqual((self.path / "tracked.txt").read_text(), "local version\n")
+        self.assertEqual(self.git("show", ":tracked.txt"), "base")
+        self.assertEqual(self.git("stash", "list"), "")
+        self.assertIsNone(status(self.repo)["operation"])
+        self.assertIs(self.ops.apply(self.repo, preview["token"]), result)
+
+    def test_pull_rejects_overlapping_staged_changes_without_losing_staging(self):
+        bare, peer = self.remote()
+        (peer / "tracked.txt").write_text("remote version\n")
+        self.git("add", "tracked.txt", path=peer); self.git("commit", "-m", "Remote overlap", path=peer)
+        self.git("push", path=peer)
+        self.file("tracked.txt", "local staged\n"); self.git("add", "tracked.txt")
+        self.file("tracked.txt", "local working\n")
+        preview = self.ops.prepare(self.repo, "pull", {"remote": "origin", "branch": "main"})
+        result = self.ops.apply(self.repo, preview["token"])
+        self.assertFalse(result["ok"])
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
+        self.assertEqual(self.git("show", ":tracked.txt"), "local staged")
+        self.assertEqual((self.path / "tracked.txt").read_text(), "local working\n")
+
+    def test_pull_rejects_untracked_collision_without_removing_the_local_file(self):
+        bare, peer = self.remote()
+        self.file("peer.txt", "untracked local version\n")
+        preview = self.ops.prepare(self.repo, "pull", {"remote": "origin", "branch": "main"})
+        result = self.ops.apply(self.repo, preview["token"])
+        self.assertFalse(result["ok"])
+        self.assertIn("peer.txt", result["message"])
+        self.assertIn("拉取已停止", result["message"])
+        self.assertEqual((self.path / "peer.txt").read_text(), "untracked local version\n")
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
+        self.assertNotIn("peer.txt", self.git("ls-files"))
+
+    def test_dirty_pull_preview_still_rejects_changes_after_confirmation(self):
+        bare, peer = self.remote()
+        self.file("tracked.txt", "preview version\n")
+        preview = self.ops.prepare(self.repo, "pull", {"remote": "origin", "branch": "main"})
+        self.file("tracked.txt", "edited after preview\n")
+        with self.assertRaisesRegex(GitError, "状态已变化"):
+            self.ops.apply(self.repo, preview["token"])
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
+        self.assertEqual((self.path / "tracked.txt").read_text(), "edited after preview\n")
+        self.assertFalse((self.path / "peer.txt").exists())
+
+    def test_diverged_pull_preserves_uncommitted_changes(self):
+        bare, peer = self.remote()
+        self.file("local.txt", "local commit\n"); self.git("add", "."); self.git("commit", "-m", "Local")
+        head = self.git("rev-parse", "HEAD")
+        self.file("tracked.txt", "local pending\n")
+        preview = self.ops.prepare(self.repo, "pull", {"remote": "origin", "branch": "main"})
+        result = self.ops.apply(self.repo, preview["token"])
+        self.assertFalse(result["ok"])
+        self.assertIn("分叉", result["message"])
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertEqual((self.path / "tracked.txt").read_text(), "local pending\n")
+        self.assertIsNone(status(self.repo)["operation"])
+        self.assertEqual(self.git("stash", "list"), "")
 
     def test_non_fast_forward_push_and_diverged_pull_leave_history(self):
         bare, peer = self.remote()
