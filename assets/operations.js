@@ -103,7 +103,60 @@ window.GitOperations = (() => {
   function enableForm(action) {
     submit = action; $("confirm-operation").disabled = false;
   }
-  async function prepare(action, args = {}, alreadyOpen = false) {
+  function commitEditor(action, args, draft = null, confirmed = false) {
+    const editor = el("textarea", "commit-message-editor");
+    editor.id = "preview-commit-message"; editor.rows = 7; editor.maxLength = 10000;
+    editor.value = args.message || "";
+    GitI18n.attr(editor, "aria-label", () => GitI18n.t("提交说明"));
+    GitI18n.attr(editor, "placeholder", () => GitI18n.t("描述这次更改…"));
+    field(() => GitI18n.t("提交说明"), editor);
+    if (draft) $("operation-content").append(el("p", "operation-description muted", () => GitI18n.t(draft.partial ?
+      "草稿基于本地改动生成，部分文件仅提取概要。请核对并修改说明。" : "草稿基于本地改动生成，可在此修改。")));
+    const update = () => {
+      if (busy) return;
+      dialogVersion++; preview = null;
+      $("commit-message").value = editor.value;
+      $("confirm-operation").disabled = !editor.value.trim() || editor.value.length > 10000;
+      GitI18n.text($("confirm-operation"), () => GitI18n.t("预览提交"));
+      submit = () => prepare(action, {...args, message: editor.value}, true, draft);
+    };
+    editor.addEventListener("input", update);
+    if (!confirmed) update();
+    return editor;
+  }
+  async function prepareCommit(action) {
+    if (busy || readOnly) return;
+    const args = {message: $("commit-message").value, ...(action === "commit_selected" ? {paths: [...selected]} : {})};
+    if (args.message.trim()) { prepare(action, args); return; }
+    if (!beginDialog(() => GitI18n.t("生成提交说明"))) return;
+    const version = dialogVersion, path = selectedRepository;
+    const target = $("operation-content");
+    target.append(el("p", "operation-description", () => GitI18n.t("正在根据提交内容生成说明…")));
+    try {
+      const data = await nativeHost.operation("git_query", {repo: path, action: "commit_message",
+        ...(action === "commit_selected" ? {paths: args.paths} : {staged: true})});
+      if (!dialog.open || version !== dialogVersion || path !== selectedRepository) return;
+      target.replaceChildren();
+      GitI18n.text($("operation-title"), () => GitI18n.t("编辑提交说明"));
+      target.append(el("p", "operation-description", () => GitI18n.t(action === "commit_selected" ?
+        "说明针对勾选文件的全部当前改动。" : "说明针对已暂存的改动。")));
+      args.message = data.message;
+      const editor = commitEditor(action, args, data);
+      $("commit-message").value = editor.value;
+      target.append(el("p", "muted", () => GitI18n.t("{count} 个文件", {count: data.files.length})));
+      const list = el("div", "operation-files");
+      for (const file of data.files) list.append(el("code", "", () => file));
+      target.append(list); editor.focus();
+    } catch (err) {
+      if (!dialog.open || version !== dialogVersion || path !== selectedRepository) return;
+      target.replaceChildren();
+      GitI18n.text($("operation-title"), () => GitI18n.t("编辑提交说明"));
+      target.append(el("p", "operation-description", () => GitI18n.t("未能生成草稿，可手动填写说明后预览提交。")));
+      const editor = commitEditor(action, args);
+      displayError(err); editor.focus();
+    }
+  }
+  async function prepare(action, args = {}, alreadyOpen = false, draft = null) {
     if (busy || readOnly) return;
     if (!alreadyOpen && !beginDialog(() => GitI18n.t(labels[action]))) return;
     const version = ++dialogVersion, path = selectedRepository;
@@ -119,7 +172,13 @@ window.GitOperations = (() => {
       const context = el("div", "operation-context");
       context.append(el("strong", "", () => data.repository.name), el("code", "", () => data.repository.path));
       target.append(context);
-      for (const text of data.details) target.append(el("p", "operation-description", () => text));
+      const committing = ["commit", "commit_selected"].includes(action);
+      // Commit plans keep their second detail for older panels. The current
+      // panel shows that exact message once, in an editable field instead.
+      for (const [index, text] of data.details.entries()) {
+        if (!committing || index !== 1) target.append(el("p", "operation-description", () => text));
+      }
+      if (committing) commitEditor(action, args, draft, true);
       if (data.files.length) {
         target.append(el("p", "muted", () => GitI18n.t("{count} 个文件", {count: data.files.length})));
         const list = el("div", "operation-files");
@@ -147,6 +206,8 @@ window.GitOperations = (() => {
     $("confirm-operation").disabled = true;
     GitI18n.text($("confirm-operation"), () => GitI18n.t("正在") + GitI18n.t(labels[chosen.action]) + "…");
     $("cancel-operation").disabled = true; $("close-operation").disabled = true;
+    const editor = $("preview-commit-message");
+    if (editor) editor.disabled = true;
     try {
       const result = await nativeHost.operation("git_apply", {repo: chosen.repository.path, token: chosen.token});
       if (result.ok && ["commit", "commit_selected"].includes(chosen.action)) $("commit-message").value = "";
@@ -178,6 +239,7 @@ window.GitOperations = (() => {
       await loadStatus();
     } finally {
       busy = false; $("cancel-operation").disabled = false; $("close-operation").disabled = false;
+      if (editor) editor.disabled = false;
     }
   }
   async function network(action) {
@@ -396,8 +458,8 @@ window.GitOperations = (() => {
     if (action && state.branch) prepare(action, {ref: state.branch.ref});
   });
   document.querySelectorAll("[data-network]").forEach(b => b.addEventListener("click", () => network(b.dataset.network)));
-  $("prepare-commit").addEventListener("click", () => prepare("commit_selected", {paths: [...selected], message: $("commit-message").value}));
-  $("prepare-staged").addEventListener("click", () => prepare("commit", {message: $("commit-message").value}));
+  $("prepare-commit").addEventListener("click", () => prepareCommit("commit_selected"));
+  $("prepare-staged").addEventListener("click", () => prepareCommit("commit"));
   $("discard-selected").addEventListener("click", () => prepare("discard", {paths: current.changes.filter(file => selected.has(file.path) && file.unstaged && file.operable && !file.conflict).map(file => file.path)}));
   for (const [id, action, key] of [["stage-selected", "stage", "unstaged"], ["unstage-selected", "unstage", "staged"]]) {
     $(id).addEventListener("click", () => prepare(action, {paths: current.changes.filter(file => selected.has(file.path) && file[key] && file.operable).map(file => file.path)}));

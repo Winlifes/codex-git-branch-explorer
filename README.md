@@ -29,6 +29,7 @@ This is an independently developed, third-party plugin distributed through this 
 | Discard changes | Discard one file's or all files' unstaged changes while preserving the index. Local backups are created before discarding. |
 | Branch operations | Create, switch and merge branches; revert commits with a new reverse commit; delete merged local branches. |
 | Remotes and conflicts | Fetch, pull with fast-forward only, push without force and set an upstream. Stage resolved conflicts, then continue or abort a merge/revert. |
+| New projects | Initialize a project without Git, confirm the GitHub account, choose private/public visibility and ignore rules, then create an empty repository or commit and upload reviewed files. |
 | Appearance | Follow the Codex theme or select light/dark mode, with themed menus, thin scrollbars and a branch drawer for narrow panels. |
 | Language | Follow the Codex language with English and Simplified Chinese UI, including menus, previews, errors, dates and number formatting. Live changes preserve drafts and selections. |
 
@@ -43,11 +44,24 @@ Branch names are grouped by `/`: `codex/card-collection` appears inside **codex*
 - Search matches the full branch name and temporarily expands matching paths. Clearing the search restores your previous folder state.
 - Use **↑/↓** to move, **→/←** to expand or collapse and move between levels, **Home/End** to jump, and **Enter/Space** to open a folder or browse a branch. Hover a branch to see its full name.
 
+## Create a GitHub repository for a new project
+
+When the current project is not a Git repository, choose **Create GitHub repository** in the empty-state page. Confirm the account, repository name, description, visibility (private by default), initial branch, ignore rules, and whether to upload an initial commit. Existing `.gitignore` content is retained. Common, Unity, Node.js, and Python templates are available.
+
+![Creation form with a demo account and private visibility selected by default](docs/screenshots/github-create-dark.jpg)
+
+The preview shows the target account/repository and exact upload paths. Public uploads require an explicit confirmation of the listed files. Common credential filenames, symlinks, and nested repositories are excluded from this initial upload; this is not a full secret-content scan. Files at or above 100 MiB are blocked before initialization. Only reviewed files are staged; the user's Git author identity, signing, and hooks remain in use.
+
+This optional feature needs the official [GitHub CLI](https://cli.github.com/), signed in with [gh auth login](https://cli.github.com/manual/gh_auth_login). The panel detects missing or expired authentication and provides the command to run. Account switching requires a new confirmation. The plugin never accepts or displays account tokens.
+
+Creation progress is shown while it runs. Completed local/remote steps are retained after a failure; the plugin never automatically repeats a creation request or deletes the new repository. On success, `origin` is connected and the optional initial upload sets the upstream branch. A GitHub CLI credential helper is configured only in the new repository for subsequent fetch/pull/push operations. The new repository opens in the Git panel. If only an empty repository was requested, no project files are staged, committed, or pushed.
+
 ## Install
 
 ### Requirements
 
 - Git and Python **3.9+**.
+- Optional: GitHub CLI for creating new GitHub repositories. Existing Git workflows do not need it.
 - Codex Desktop with support for **MCP thread entrypoints**. Validated on macOS with the desktop-bundled Codex CLI `0.154.0-alpha.6.2`; other versions and platforms have not been verified.
 
 No third-party Python packages, npm, API key or developer-hosted cloud service are required.
@@ -116,12 +130,16 @@ The confirmation lists the repository, current branch and affected paths. Staged
 
 Every write operation first shows a concrete preview. Confirmation tokens expire after five minutes, and the plugin rechecks the repository state before execution. If the state changes, generate and confirm a new preview.
 
+![Editable draft generated for two C# files in a disposable demo repository](docs/screenshots/commit-message-draft-dark.jpg)
+
 - **Commit selected** includes every current change in the selected files while preserving other staged and unstaged files. The preview lists exact paths. If a hook fails, refresh to inspect the selected files' index state.
 - **Commit staged** includes only staged content, preserving unstaged edits in the same file. Both modes use your existing identity, credentials, hooks and signing configuration.
+- **Draft a message**: when the message is empty or whitespace-only, either commit button opens an editable local draft based on that commit's files, line changes, and recognized code symbols or configuration keys. No external AI service is called. Edit it, choose **Preview commit**, review the scope and message, then **Confirm commit**. Cancelling retains the draft. Large or numerous files are marked as partially summarized. Existing messages open the preview directly and remain editable; editing requires a refreshed preview before confirmation.
 - **Stash changes** can include untracked files. Applying requires a clean working tree, restores the index and retains the stash. Deletion previews identify the exact record.
 - **Discard** applies to unstaged changes. Partially staged files are restored to their index version. To discard staged edits, unstage them first.
 - **Untracked files** are backed up, then removed only at the exact paths listed in the preview. Ignored files are excluded; submodules, nested repositories and conflicted paths require separate handling.
-- **Switch, merge, pull and revert** require a clean working tree. Pull is fast-forward only; branch deletion is limited to local branches merged into the current branch.
+- **Pull** permits local changes and untracked files that Git can retain during a fast-forward update. Preview and confirm first. Git rejects files that would be overwritten, with the affected paths shown. There is no automatic stashing, committing, discarding or rebasing; diverged history still stops for separate handling.
+- **Switch, merge and revert** require a clean working tree; branch deletion is limited to local branches merged into the current branch.
 - **Revert** creates a reverse commit and preserves history. Hard reset, force push, force deletion and remote branch deletion are not available.
 
 Discard backups are stored under `codex-git-explorer/discard-backups/` inside the worktree's Git metadata directory. The result shows the actual location. Each backup's `manifest.json` maps original paths, file modes and symlink targets to the saved data. Backups are retained for manual recovery; they are not deleted automatically.

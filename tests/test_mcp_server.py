@@ -65,7 +65,7 @@ class McpTests(unittest.TestCase):
         self.assertIn('const GitBranchTree =', resource["text"])
         self.assertNotIn('src="./locales/en.js"', resource["text"])
         self.assertIn('git-language-changed', resource["text"])
-        for name in ("commit-graph", "file-tree", "diff-view", "workbench", "stashes"):
+        for name in ("commit-graph", "file-tree", "diff-view", "workbench", "stashes", "github"):
             self.assertNotIn('src="./' + name + '.js"', resource["text"])
         self.assertIn('const GitCommitGraph =', resource["text"])
         self.assertIn('const GitFileTree =', resource["text"])

@@ -17,6 +17,7 @@
   <script src="./operations.js" defer></script>
   <script src="./stashes.js" defer></script>
   <script src="./workbench.js" defer></script>
+  <script src="./github.js" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -45,6 +46,10 @@
   <form id="repo-picker" class="repo-picker" hidden>
     <h2 id="repo-picker-title">打开 Git 仓库</h2>
     <p id="repo-picker-message">输入本地仓库的完整路径，查看分支和提交记录。</p>
+    <div id="github-start" class="github-start" hidden>
+      <div><strong>开始管理此项目</strong><p>初始化本地 Git，创建 GitHub 仓库，并选择是否首次上传。</p></div>
+      <button id="create-github" class="button primary" type="button" data-icon="plus">创建 GitHub 仓库</button>
+    </div>
     <div id="repo-context-checks" class="context-checks" role="status" aria-live="polite" hidden></div>
     <div id="repo-context-paths" class="context-paths" hidden></div>
     <button id="recheck-context" class="button primary" type="button" hidden>重新检查</button>
@@ -159,6 +164,11 @@
     <header class="operations-header"><h2 id="operation-title">Git 操作</h2><button id="close-operation" class="icon-button" data-icon="close" aria-label="关闭操作"></button></header>
     <div class="operations-body"><div id="operation-content"></div><p id="operation-error" class="operations-error" role="alert" hidden></p></div>
     <footer class="operations-footer"><button id="cancel-operation" class="button">取消</button><button id="confirm-operation" class="button primary" disabled>预览操作</button></footer>
+  </dialog>
+  <dialog id="github-dialog" class="operations-modal github-modal" aria-labelledby="github-title">
+    <header class="operations-header"><div><h2 id="github-title">创建 GitHub 仓库</h2><p id="github-project-path" class="muted"></p></div><button id="close-github" class="icon-button" data-icon="close" aria-label="关闭创建 GitHub 仓库"></button></header>
+    <div class="operations-body"><div id="github-content"></div><p id="github-error" class="operations-error" role="alert" hidden></p></div>
+    <footer class="operations-footer"><button id="cancel-github" class="button">取消</button><button id="confirm-github" class="button primary" disabled>预览创建</button></footer>
   </dialog>
 </body>
 </html>
