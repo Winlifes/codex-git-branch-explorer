@@ -573,6 +573,8 @@
   "确认创建空仓库": "Create empty repository",
   "打开本地仓库": "Open local repository",
   "Git 配置重定向了首次上传地址，请先检查 URL 重写规则：": "Git configuration redirects the initial upload URL. Check URL rewrite rules first: ",
+  "首次提交内容与预览不一致，已停止创建和上传。请检查本地提交与钩子。": "The initial commit differs from the reviewed content. Creation and upload stopped. Inspect the local commit and hooks.",
+  "首次提交已变化，已停止上传。请检查本地与 GitHub 状态。": "The initial commit changed. Upload stopped. Inspect the local repository and GitHub state.",
   "现有规则忽略了 .gitignore，请先调整规则后重新预览。": "Existing rules ignore .gitignore. Adjust the rules, then create a new preview.",
   "无法检查 .gitignore 的忽略状态。": "Unable to check whether .gitignore is ignored.",
   "无效的提交说明生成范围。": "Invalid scope for commit message generation.",

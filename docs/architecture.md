@@ -121,7 +121,7 @@ MCP UI 的公开基础协议见 [OpenAI 插件 UI 文档](https://developers.ope
 
 `git_query` 和 `git_prepare` 标记为只读，`git_apply` 明确标记为可写、可能破坏性和可能访问外部。操作工具仅对面板开放；面板通过预览返回的短期凭据确认操作，不接受自由格式的 Git 命令。
 
-`scripts/github_setup.py` 负责非 Git 项目的创建。`github_project` 检查显式目录或查询任务进度；`github_prepare` 使用临时 Git index 计算忽略规则与确切路径，不修改项目，确认凭据有效期为 5 分钟并绑定任务和路径。应用前复核账号 ID、提交身份、文件内容指纹与忽略文件。`github_apply` 在后台创建任务，先初始化与提交，再创建远程并推送；进度查询不会重放写操作。失败保留已有步骤和结果，远程创建请求超时标记为待核实，不能自动重复请求。API 通过 `gh api --hostname github.com` 调用，不处理令牌；新仓库本地配置 gh 的 credential helper，供首次与后续 Git 远程操作使用，不修改全局凭据设置。测试仅使用模拟 API 和本地裸远程。
+`scripts/github_setup.py` 负责非 Git 项目的创建。`github_project` 检查显式目录或查询任务进度；`github_prepare` 使用临时 Git index 计算忽略规则与确切路径，不修改项目，确认凭据有效期为 5 分钟并绑定任务和路径。远程查询之后、初始化之前复核账号 ID、提交身份、文件内容指纹与忽略文件，暂存后再核对上传内容。提交后检查其 tree 等于执行钩子前暂存的 tree，并且没有额外父提交；钩子改变内容时不创建远程或上传。`github_apply` 在后台创建任务，先初始化与提交，再创建远程并推送；推送固定为核对的 SHA 和 HTTPS 目标，不跟随其他标签，上传前也检查 HEAD 和 Git 的 `insteadOf` / `pushInsteadOf` 规则。进度查询不会重放写操作。失败保留已有步骤和结果，远程创建请求超时标记为待核实，不能自动重复请求。API 通过 `gh api --hostname github.com` 调用，不处理令牌；新仓库本地配置 gh 的 credential helper，供首次与后续 Git 远程操作使用，不修改全局凭据设置。测试仅使用模拟 API 和本地裸远程。
 
 另保留独立浏览器模式，便于调试或在其他环境中使用：
 

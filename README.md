@@ -58,6 +58,8 @@ Creation progress is shown while it runs. Completed local/remote steps are retai
 
 ## Install
 
+For the first GitHub upload, files are checked again after remote lookups and staging. If a commit hook changes the initial commit's content, or the commit changes before the upload, creation/upload stops and completed local steps remain available for inspection. The first push is pinned to the verified commit and URL; unrelated tags are excluded.
+
 ### Requirements
 
 - Git and Python **3.9+**.

@@ -173,6 +173,7 @@ def excluded_reason(relative, full):
 def snapshot(path, template, upload):
     original, content = ignore_contents(path, template)
     digest = hashlib.sha256(original + b"\0" + content)
+    upload_digest = hashlib.sha256()
     files, excluded, total = [], [], 0
     if upload:
         deadline = time.monotonic() + 40
@@ -223,19 +224,31 @@ def snapshot(path, template, upload):
                         if time.monotonic() > deadline:
                             raise GitError(ui("文件检查超时，请先排除生成文件和大型资源后重试。"))
                 files.append(relative); total += size
-                digest.update(json.dumps([relative, size, bool(mode & 0o111), file_digest.hexdigest()]).encode())
+                record = json.dumps([relative, size, bool(mode & 0o111), file_digest.hexdigest()]).encode()
+                digest.update(record); upload_digest.update(record)
         if content or (path / ".gitignore").exists():
             files.append(".gitignore"); total += len(content)
+            upload_digest.update(json.dumps([".gitignore", hashlib.sha256(content).hexdigest()]).encode())
     return {"files": sorted(files), "excluded": excluded, "bytes": total,
-            "fingerprint": digest.hexdigest(), "original": original, "ignore": content}
+            "fingerprint": digest.hexdigest(), "upload_fingerprint": upload_digest.hexdigest(),
+            "original": original, "ignore": content}
 
 
 def check_push_destination(path, url):
-    # --get-url expands Git URL rewrites without contacting any remote. A
-    # global HTTPS-to-SSH rewrite could use a different authenticated account.
-    resolved = decode(run(SimpleNamespace(path=str(path)), "ls-remote", "--get-url", url)).strip()
-    if resolved != url:
-        raise GitError(ui("Git 配置重定向了首次上传地址，请先检查 URL 重写规则：") + safe_output(resolved))
+    # Resolve pushInsteadOf as well as insteadOf without contacting a remote.
+    # Before initialization, use a disposable repository for Git's own resolver.
+    local = SimpleNamespace(path=str(path))
+    if not run(local, "rev-parse", "--git-dir", check=False)[0]:
+        resolved = decode(run(local, "remote", "get-url", "--push", "--all", "origin")).splitlines()
+    else:
+        with tempfile.TemporaryDirectory(prefix="github-push-preview-") as directory:
+            local = SimpleNamespace(path=directory)
+            run(local, "init", "--quiet")
+            name = "codex-preview-" + secrets.token_hex(8)
+            run(local, "remote", "add", name, url)
+            resolved = decode(run(local, "remote", "get-url", "--push", "--all", name)).splitlines()
+    if resolved != [url]:
+        raise GitError(ui("Git 配置重定向了首次上传地址，请先检查 URL 重写规则：") + safe_output("\n".join(resolved)))
 
 
 class GithubSetup:
@@ -367,9 +380,6 @@ class GithubSetup:
             account = self.client.account()
             if (account["login"], account["id"]) != (plan["account"]["login"], plan["account"]["id"]):
                 raise GitError(ui("GitHub 账号已变化，请重新确认账号并预览。"))
-            current = snapshot(path, settings["template"], settings["upload"])
-            if current["fingerprint"] != expected["fingerprint"]:
-                raise GitError(ui("项目文件或忽略规则已变化，请重新预览。"))
             local = SimpleNamespace(path=str(path))
             if settings["upload"] and decode(run(local, "var", "GIT_AUTHOR_IDENT")).strip().rsplit(" ", 2)[0] != plan["identity"]:
                 raise GitError(ui("Git 提交身份已变化，请重新预览。"))
@@ -378,6 +388,12 @@ class GithubSetup:
                 check_push_destination(path, "https://github.com/" + full_name + ".git")
             if self.client.request("repos/" + full_name, missing_ok=True) is not None:
                 raise GitError(ui("同名 GitHub 仓库已存在，请使用其他名称；不会覆盖或连接已有仓库。"))
+            # Remote checks can take seconds. Recheck files after those checks,
+            # immediately before making any project-local changes.
+            path = project_path(plan["path"])
+            current = snapshot(path, settings["template"], settings["upload"])
+            if current["fingerprint"] != expected["fingerprint"]:
+                raise GitError(ui("项目文件或忽略规则已变化，请重新预览。"))
             self._update(job, message=ui("正在初始化本地 Git…"))
             run(local, "init", "-b", settings["branch"])
             self._update(job, local_initialized=True)
@@ -394,7 +410,17 @@ class GithubSetup:
                 # literal pathspecs, NUL separators and stdin for arbitrary names.
                 data = b"\0".join((":(top,literal)" + name).encode() for name in current["files"]) + b"\0"
                 run(local, "add", "--pathspec-from-file=-", "--pathspec-file-nul", input_data=data)
+                staged = snapshot(path, "existing", True)
+                if (staged["files"] != current["files"] or
+                        staged["upload_fingerprint"] != current["upload_fingerprint"] or
+                        sorted(decode(name) for name in run(local, "ls-files", "-z").split(b"\0") if name) != current["files"]):
+                    raise GitError(ui("项目文件或忽略规则已变化，请重新预览。"))
+                reviewed_tree = run(local, "write-tree").strip()
                 run(local, "commit", "-m", settings["message"])
+                commit = decode(run(local, "rev-parse", "--verify", "HEAD")).strip()
+                if (run(local, "rev-parse", commit + "^{tree}").strip() != reviewed_tree or
+                        len(run(local, "rev-list", "--parents", "-n", "1", commit).split()) != 1):
+                    raise GitError(ui("首次提交内容与预览不一致，已停止创建和上传。请检查本地提交与钩子。"))
                 self._step(job, ui("首次提交已创建。"))
             confirmed = self.client.account()
             if (confirmed["id"], confirmed["login"]) != (account["id"], account["login"]):
@@ -420,8 +446,14 @@ class GithubSetup:
                 if (confirmed["id"], confirmed["login"]) != (account["id"], account["login"]):
                     raise GitError(ui("GitHub 账号已变化，请重新确认账号并预览。"))
                 check_push_destination(path, expected_url + ".git")
+                if decode(run(local, "rev-parse", "--verify", "HEAD")).strip() != commit:
+                    raise GitError(ui("首次提交已变化，已停止上传。请检查本地与 GitHub 状态。"))
                 self._update(job, message=ui("正在推送首次提交…"))
-                run(local, "push", "--set-upstream", "origin", "HEAD:refs/heads/" + settings["branch"])
+                # Pin both the destination and object ID: HEAD/origin can change
+                # while Git starts, and unrelated tags must not follow this push.
+                run(local, "push", "--no-follow-tags", "--", expected_url + ".git", commit + ":refs/heads/" + settings["branch"])
+                run(local, "config", "--local", "branch." + settings["branch"] + ".remote", "origin")
+                run(local, "config", "--local", "branch." + settings["branch"] + ".merge", "refs/heads/" + settings["branch"])
                 self._step(job, ui("首次提交已推送，上游分支已设置。"))
             self._update(job, state="succeeded", ok=True, message=ui("GitHub 仓库创建完成。"))
         except Exception as error:

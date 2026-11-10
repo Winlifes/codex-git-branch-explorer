@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2 — 2026-11-10
+
+- Recheck initial-upload files after GitHub lookups and staging; stop if the reviewed files or ignore rules changed.
+- Verify the first commit's tree and root history after hooks, and reject a changed HEAD before uploading. Preserve local results for inspection rather than creating or pushing unreviewed content.
+- Pin the first push to the verified commit and destination, exclude unrelated tags, and detect both normal and push-only Git URL rewrites.
+- Add regressions for upload races, hook-added files, push-only rewrites and concurrent HEAD changes.
+
 ## 0.7.1 — 2026-10-14
 
 - Allow fast-forward pulls with uncommitted changes when Git can retain them. Remove the blanket clean-worktree requirement for pull; keep preview confirmation and state-change checks.

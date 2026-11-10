@@ -192,6 +192,15 @@ class GithubSetupTests(unittest.TestCase):
         self.assertFalse((self.project / ".git").exists())
         self.assertFalse(self.client.created)
 
+    def test_git_push_only_url_rewrite_is_rejected_before_initialization(self):
+        def rewrite(repo, *args, **kwargs):
+            return self.git_run(repo, "-c", "url.ssh://git@github.com/.pushInsteadOf=https://github.com/", *args, **kwargs)
+        with patch("github_setup.run", side_effect=rewrite), self.assertRaises(GitError) as error:
+            self.prepare()
+        self.assertIn("URL 重写", str(error.exception))
+        self.assertFalse((self.project / ".git").exists())
+        self.assertFalse(self.client.created)
+
     def test_author_timestamp_can_change_while_reviewing_preview(self):
         counter = [100]
         def changing_timestamp(repo, *args, **kwargs):
@@ -231,6 +240,86 @@ class GithubSetupTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertFalse((self.project / ".git").exists())
         self.assertFalse(self.client.created)
+
+    def test_files_changed_during_name_check_are_rejected_before_initialization(self):
+        preview = self.prepare()
+        request = self.client.request
+        def changed(endpoint, payload=None, missing_ok=False):
+            if payload is None:
+                (self.project / "hello.txt").write_text("changed during GitHub lookup\n")
+            return request(endpoint, payload, missing_ok)
+        with patch.object(self.client, "request", side_effect=changed):
+            result = self.apply(preview)
+        self.assertFalse(result["ok"], result)
+        self.assertFalse((self.project / ".git").exists())
+        self.assertFalse(self.client.created)
+
+    def test_commit_hook_cannot_add_unreviewed_files_to_initial_upload(self):
+        (self.project / ".env").write_text("test-secret-not-for-upload\n")
+        hooks = self.root / "hooks"; hooks.mkdir(); self.hooks = str(hooks)
+        hook = hooks / "pre-commit"
+        hook.write_text("#!/bin/sh\ngit add --force -- .env\n")
+        hook.chmod(0o755)
+        preview = self.prepare()
+        self.assertNotIn(".env", preview["files"])
+        result = self.apply(preview)
+        self.assertFalse(result["ok"], result)
+        self.assertTrue(result["local_initialized"])
+        self.assertFalse(self.client.created)
+        self.assertFalse(any("push" in command for command in self.commands))
+
+    def test_changed_commit_during_remote_creation_is_never_pushed(self):
+        preview = self.prepare()
+        request = self.client.request
+        def changed(endpoint, payload=None, missing_ok=False):
+            result = request(endpoint, payload, missing_ok)
+            if payload is not None:
+                (self.project / "extra.txt").write_text("not in the preview\n")
+                self.git("add", "extra.txt")
+                self.git("-c", "user.name=Test User", "-c", "user.email=test@example.test",
+                         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + self.hooks,
+                         "commit", "-m", "Unreviewed commit")
+            return result
+        with patch.object(self.client, "request", side_effect=changed):
+            result = self.apply(preview)
+        self.assertFalse(result["ok"], result)
+        self.assertEqual(result["remote_state"], "created")
+        self.assertEqual(len(self.client.created), 1)
+        self.assertFalse(any("push" in command for command in self.commands))
+
+    def test_files_changed_while_staging_are_not_committed_or_uploaded(self):
+        preview = self.prepare()
+        def changed(repo, *args, **kwargs):
+            result = self.git_run(repo, *args, **kwargs)
+            if args[0] == "add":
+                (self.project / "hello.txt").write_text("changed during staging\n")
+            return result
+        with patch("github_setup.run", side_effect=changed):
+            result = self.apply(preview)
+        self.assertFalse(result["ok"], result)
+        self.assertFalse(self.client.created)
+        self.assertFalse(any(command[0] in {"commit", "push"} for command in self.commands))
+
+    def test_first_push_pins_reviewed_commit_if_head_moves_when_git_starts(self):
+        preview = self.prepare()
+        reviewed = []
+        def changed(repo, *args, **kwargs):
+            if args[0] == "push":
+                reviewed.append(self.git("rev-parse", "HEAD"))
+                (self.project / "later.txt").write_text("not reviewed for upload\n")
+                self.git("add", "later.txt")
+                self.git("-c", "user.name=Test User", "-c", "user.email=test@example.test",
+                         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + self.hooks,
+                         "commit", "-m", "Concurrent change")
+            return self.git_run(repo, *args, **kwargs)
+        with patch("github_setup.run", side_effect=changed):
+            result = self.apply(preview)
+        self.assertTrue(result["ok"], result)
+        pushed = subprocess.check_output(["git", "--git-dir=" + str(self.remote), "rev-parse", "refs/heads/main"]).decode().strip()
+        self.assertEqual(pushed, reviewed[0])
+        self.assertNotEqual(pushed, self.git("rev-parse", "HEAD"))
+        uploaded = subprocess.check_output(["git", "--git-dir=" + str(self.remote), "ls-tree", "--name-only", "refs/heads/main"]).decode()
+        self.assertNotIn("later.txt", uploaded)
 
     def test_existing_git_directory_and_repository_parent_are_rejected(self):
         subprocess.run(["git", "init", "--quiet", str(self.project)], check=True)
