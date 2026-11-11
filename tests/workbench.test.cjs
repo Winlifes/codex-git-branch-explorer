@@ -35,6 +35,23 @@ test("octopus parents and disconnected tips have deterministic, distinct lanes",
   assert.deepEqual(Graph.layout([]), {rows: [], width: 52});
 });
 
+test("multiple branch tips connect only through their actual common parents", () => {
+  const history = [commit("feature-tip", "feature-old"), commit("remote-master", "master"),
+    commit("master", "base"), commit("feature-old", "base"), commit("base")];
+  const graph = Graph.layout(history);
+  assert.notEqual(graph.rows[0].column, graph.rows[1].column);
+  assert.equal(graph.rows[1].edges.filter(edge => edge.end === 19).length, 0);
+  assert.ok(graph.rows[1].edges.some(edge => edge.start === 0 && edge.end === 38));
+  assert.ok(graph.rows[3].edges.some(edge => edge.start === 19 && edge.to === graph.rows[4].column));
+  const firstPage = Graph.layout(history.slice(0, 2));
+  assert.deepEqual(firstPage.rows, graph.rows.slice(0, 2));
+});
+
+test("search results without parent links never invent connections across filtered commits", () => {
+  const graph = Graph.layout([commit("remote-tip"), commit("feature-hit"), commit("old-hit")]);
+  assert.ok(graph.rows.every(row => row.edges.length === 0));
+});
+
 test("file hierarchy groups nested Unity paths without changing Git paths", () => {
   const files = [{path:"Assets/Scripts/UI/ChatPanel.cs"}, {path:"Assets/Scripts/Core/Game.cs"}, {path:"README.md"}];
   const copy = JSON.stringify(files), tree = Files.build(files);

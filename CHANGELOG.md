@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1 — 2026-11-11
+
+- Clearing text/author/first-parent filters preserves the chosen log scope and keeps the scope control in sync, so switching back to all branches remains effective.
+- Return branch/tag/HEAD metadata with each new multi-branch query, captured from the same catalog as its query roots. Refresh decorations and operation targets from that context, retain it across pagination, and ignore responses superseded by a newer query.
+- Add regressions for filter clearing, external ref/HEAD/tag updates, frozen page decorations, and delayed responses.
+
+## 0.8.0 — 2026-11-11
+
+- Show local and remote-tracking branches together in one commit graph by default. Choose multiple branches or tags to narrow the log without switching the worktree or changing the branch used by explicit Git operations.
+- Prepare the current branch, its upstream and existing master/main refs as a selection preset. Search selections, preserve them per repository, and retain branch tip labels and the current HEAD marker.
+- Freeze all query roots as commit IDs for stable pagination after branches move or disappear. Order concurrent histories by commit date while keeping parents below their children, preserve real merge edges, and leave filtered search results unconnected.
+
 ## 0.7.2 — 2026-11-10
 
 - Recheck initial-upload files after GitHub lookups and staging; stop if the reviewed files or ignore rules changed.
