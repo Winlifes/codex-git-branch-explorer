@@ -1,5 +1,7 @@
 # Screenshot capture notes / 截图来源
 
+`multi-branch-log-dark.png` shows v0.8.0 on 2026-11-11 at the default 1280 × 720 viewport. The local MCP development host connects the actual panel and history queries to a disposable `rider-history-demo` repository. It shows the current branch, local master and a newer origin/master together, including an earlier merge, HEAD, ref labels and parent edges. The banner identifies the fixture. The image is unedited; no real project data or remote operations were used.
+
 `commit-message-draft-dark.jpg` shows v0.7.0 on 2026-10-12 at the default 1280 × 720 viewport. The local MCP development host connects the actual panel and draft generator to a disposable `orbit-studio` repository. The unedited image shows an editable draft for two selected C# files, including names found in their changes. The top banner identifies the temporary fixture. No real project files or remote repositories were modified.
 
 `github-create-dark.jpg` shows v0.6.0 on 2026-10-12 at the default 857 × 984 viewport. The local MCP development host uses the actual panel and Python preview implementation, a disposable `Orbit Starter` project, and a simulated GitHub account `demo-user`. The host explicitly disables GitHub creation. The image is unedited and shows account confirmation, private-by-default visibility, ignore rules, and optional initial upload. No real GitHub repository was created.

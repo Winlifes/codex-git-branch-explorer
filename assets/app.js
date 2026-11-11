@@ -10,6 +10,8 @@ let selectedRepository = "";
 let folderStorage;
 try { folderStorage = localStorage; } catch {}
 const branchExpansion = new GitBranchTree.Expansion(folderStorage);
+const historyScope = new GitHistoryScope.Selection(folderStorage);
+let historySelectionDraft = new Set();
 let branchRows = [], branchFocusId = "";
 try { $("theme").value = localStorage.getItem("git-explorer-theme") || "auto"; } catch {}
 function setTheme() {
@@ -70,7 +72,8 @@ async function api(route, params = {}, channel = route, method = "GET") {
       if (selectedRepository) args.repo = selectedRepository;
       return await nativeHost.query(route, args, controller.signal);
     }
-    const response = await fetch("./api/" + route + "?" + new URLSearchParams(params),
+    const encoded = Object.entries(params).map(([key, value]) => [key, Array.isArray(value) ? JSON.stringify(value) : value]);
+    const response = await fetch("./api/" + route + "?" + new URLSearchParams(encoded),
       {signal: controller.signal, cache: "no-store", method});
     const body = await response.json();
     GitI18n.hydrate(body, body._gitMessages);
@@ -158,7 +161,7 @@ function renderBranches() {
         item.append(top);
         const tracking = () => b.tracking.replace("[ahead ", GitI18n.t("领先 ")).replace(", behind ", GitI18n.t(" · 落后 ")).replace("[behind ", GitI18n.t("落后 ")).replace("[gone]", GitI18n.t("上游已删除")).replace("]", "");
         item.append(el("span", "branch-meta", () => [date(b.date), b.sha?.slice(0, 7), tracking()].filter(Boolean).join(" · ") || GitI18n.t("尚无提交")));
-        item.addEventListener("click", () => { setBranchFocus(entry); selectBranch(b); });
+        item.addEventListener("click", () => { setBranchFocus(entry); selectBranch(b, {reload: false}); });
       }
     });
   }
@@ -235,6 +238,7 @@ async function refresh(initialData = null) {
     const repo = data.repository;
     if (repo.detached) state.branches.unshift({ref: repo.head, sha: repo.head, name: "HEAD",
       remote: false, current: true, detached: true, tracking: "", date: "", subject: ""});
+    historyScope.use(repo.path, state.branches, state.tags);
     GitI18n.text($("repo-name"), () => repo.name);
     GitI18n.text(document.querySelector("title"), () => repo.name + GitI18n.t(" · Git 分支"));
     GitI18n.text($("repo-path"), () => repo.path);
@@ -265,19 +269,56 @@ async function refresh(initialData = null) {
   } catch (err) { error(err); }
   finally { if (version === state.branchesVersion) $("refresh").disabled = false; }
 }
-function selectBranch(branch, {reveal = true} = {}) {
+function updateHistoryScope() {
+  $("history-scope").value = historyScope.mode;
+  GitUI.sync($("history-scope"));
+  GitI18n.text($("branch-title"), () => historyScope.mode === "all" ? GitI18n.t("全部分支") :
+    GitI18n.t("所选分支 · {count}", {count: historyScope.refs.length}));
+  const current = state.branches.find(branch => branch.current);
+  GitI18n.text($("branch-description"), () => GitI18n.t("当前工作区：{name}", {name: current?.name || GitI18n.t("尚无分支")}) +
+    (state.branch ? GitI18n.t(" · 操作目标：{name}", {name: state.branch.name}) : ""));
+  const selected = [...state.branches, ...state.tags].filter(branch => historyScope.refs.includes(branch.ref));
+  GitI18n.text($("history-scope-summary"), () => historyScope.mode === "all" ?
+    GitI18n.t("本地及远程跟踪分支") : GitI18n.t("已选 {count} 个", {count: selected.length}));
+  GitI18n.attr($("history-scope-summary"), "title", () => selected.map(branch => branch.name).join(", "));
+}
+function focusBranchTip() {
+  $("history-focus-note").hidden = true;
+  const sha = state.branch?.sha;
+  for (const row of $("commits").children) row.classList.toggle("focused-tip", row.dataset.sha === sha);
+  const row = [...$("commits").children].find(row => row.dataset.sha === sha);
+  if (row) { row.scrollIntoView({block: "center"}); selectCommit(sha); }
+  else if (sha) {
+    GitI18n.text($("history-focus-note"), () => GitI18n.t("该分支节点尚未显示。可继续加载，或通过「选择分支」调整日志范围。"));
+    $("history-focus-note").hidden = false;
+  }
+}
+function selectBranch(branch, {reveal = true, reload = true} = {}) {
   state.branch = branch;
   if (reveal) branchExpansion.reveal(branch);
   closeBranches();
   closeDetail();
   renderBranches();
-  GitI18n.text($("branch-title"), () => branch.detached ? GitI18n.t("游离 HEAD") : branch.name);
-  GitI18n.text($("branch-description"), () => branch.detached ? GitI18n.t("当前 HEAD 未指向分支") :
-    (branch.tag ? GitI18n.t("标签") : branch.remote ? GitI18n.t("远程跟踪分支") : GitI18n.t("本地分支")) +
-    (branch.upstream ? GitI18n.t(" · 上游 ") + branch.upstream.replace("refs/remotes/", "").replace("refs/heads/", "") : "") +
-    (branch.current ? GitI18n.t(" · 当前工作区") : ""));
-  loadHistory();
+  updateHistoryScope();
+  if (reload) loadHistory(); else focusBranchTip();
   window.GitOperations?.updateBranchActions();
+}
+function applyLogContext(catalog) {
+  const repo = catalog.repository;
+  const headChanged = state.repository?.head !== repo.head || state.repository?.current_ref !== repo.current_ref;
+  const target = state.branch?.ref;
+  state.repository = repo;
+  state.branches = [...catalog.branches]; state.tags = [...(catalog.tags || [])];
+  if (repo.detached) state.branches.unshift({ref: repo.head, sha: repo.head, name: "HEAD",
+    remote: false, current: true, detached: true, tracking: "", date: "", subject: ""});
+  state.branch = [...state.branches, ...state.tags].find(branch => branch.ref === target) ||
+    state.branches.find(branch => branch.current) || state.branches[0] || null;
+  historyScope.use(repo.path, state.branches, state.tags);
+  state.historyHead = repo.head;
+  state.historyBranches = [...state.branches]; state.historyTags = [...state.tags];
+  renderBranches(); updateHistoryScope();
+  window.GitOperations?.updateBranchActions();
+  if (headChanged) document.dispatchEvent(new CustomEvent("git-repository-loaded"));
 }
 async function loadHistory(more = false) {
   if (!state.branch) return;
@@ -288,9 +329,10 @@ async function loadHistory(more = false) {
     $("load-more").hidden = true;
     closeDetail();
     empty($("commits"), () => GitI18n.t("正在读取提交…"));
+    $("history-focus-note").hidden = true;
+    state.historyHead = null; state.historyBranches = []; state.historyTags = [];
   }
-  const branch = state.branch;
-  if (branch.unborn) {
+  if (historyScope.mode === "selected" && !historyScope.refs.length) {
     controllers.get("commits")?.abort();
     GitI18n.text($("history-status"), () => GitI18n.t("0 条提交"));
     empty($("commits"), () => GitI18n.t("这个分支还没有提交"), () => GitI18n.t("创建首个提交后点击刷新。"));
@@ -299,9 +341,17 @@ async function loadHistory(more = false) {
   $("load-more").disabled = true;
   GitI18n.text($("history-status"), () => GitI18n.t("正在读取…"));
   try {
-    const data = await api("commits", {ref: state.snapshot || branch.ref, offset: state.offset,
+    const data = await api("commits", {...historyScope.query(state.snapshot), offset: state.offset,
       limit: 50, ...state.filters});
     if (version !== state.historyVersion) return;
+    if (!more) {
+      if (data.log_context) applyLogContext(data.log_context);
+      else {
+        // Older query servers return commits without reference metadata.
+        state.historyHead = state.repository?.head;
+        state.historyBranches = [...state.branches]; state.historyTags = [...state.tags];
+      }
+    }
     state.snapshot = data.snapshot;
     state.offset = data.next_offset;
     state.hasMore = data.has_more;
@@ -334,22 +384,31 @@ function renderCommits() {
   document.querySelector(".history").style.setProperty("--graph-width", graph.width + "px");
   for (const [index, c] of state.commits.entries()) {
     const button = el("button", "commit" + (c.parents.length > 1 ? " merge" : "") +
+      (state.historyHead === c.sha ? " current-head" : "") +
+      (state.branch?.sha === c.sha ? " focused-tip" : "") +
       (state.detail?.sha === c.sha ? " selected" : ""));
     button.dataset.sha = c.sha;
     const timestamp = c.committed_date || c.date;
     const statsLabel = () => c.stats ? GitI18n.t("新增 {added} 行，删除 {deleted} 行", {added: c.stats.additions, deleted: c.stats.deletions}) +
       (c.stats.binary_files ? GitI18n.t("，另有 ") + c.stats.binary_files + GitI18n.t(" 个二进制文件") : "") : GitI18n.t("行数统计暂不可用");
+    const references = GitHistoryScope.references(state.historyBranches || state.branches, state.historyTags || state.tags, c.sha);
     GitI18n.attr(button, "aria-label", () => c.subject + GitI18n.t("，") + c.author + GitI18n.t("，") + c.sha.slice(0, 7) +
+      (references.length ? GitI18n.t("，分支：{names}", {names: references.map(branch => branch.name).join(", ")}) : "") +
+      (state.historyHead === c.sha ? GitI18n.t("，当前工作区 HEAD") : "") +
       GitI18n.t("，提交于 ") + exactDate(timestamp) + GitI18n.t("，") + statsLabel());
     button.append(GitCommitGraph.render(graph.rows[index], graph.width));
     const title = el("span", "commit-title");
     const subject = el("span", "commit-subject", () => c.subject || GitI18n.t("（无提交标题）"));
     subject.title = c.subject;
-    title.append(subject);
-    for (const branch of [...state.branches, ...state.tags].filter(b => b.sha === c.sha).slice(0, 3)) {
+    const labels = el("span", "commit-references");
+    labels.title = references.map(branch => branch.name).join("\n");
+    if (state.historyHead === c.sha) labels.append(el("span", "commit-ref head", "HEAD"));
+    for (const branch of references) {
       const ref = el("span", "commit-ref" + (branch.current ? " current" : branch.remote ? " remote" : ""), () => branch.name);
-      ref.title = branch.ref; title.append(ref);
+      ref.title = branch.ref; labels.append(ref);
     }
+    if (labels.children.length) title.append(labels);
+    title.append(subject);
     const stats = el("span", "commit-stats");
     GitI18n.attr(stats, "title", () => statsLabel() + (c.stats ? GitI18n.t("；") + (c.parents.length ? GitI18n.t("相对第一父提交") : GitI18n.t("根提交，相对空目录")) +
       (c.stats.binary_files ? GitI18n.t("；二进制文件不计入行数") : "") : c.stats_error ? GitI18n.t("：") + GitI18n.format(c.stats_error) : ""));
@@ -367,6 +426,64 @@ function renderCommits() {
     target.append(button);
   }
 }
+function updateHistorySelectionCount() {
+  GitI18n.text($("history-selected-count"), () => GitI18n.t("已选 {count} 个", {count: historySelectionDraft.size}));
+  $("apply-history-branches").disabled = historySelectionDraft.size === 0;
+}
+function renderHistoryChoices() {
+  const query = $("history-branch-search").value.trim().toLocaleLowerCase();
+  const target = $("history-branches-list");
+  target.replaceChildren();
+  const choices = [...state.branches, ...state.tags].filter(branch => branch.sha &&
+    (!query || branch.name.toLocaleLowerCase().includes(query) || branch.ref.toLocaleLowerCase().includes(query)))
+    .sort((a, b) => Number(Boolean(a.tag)) - Number(Boolean(b.tag)) || Number(Boolean(a.remote)) - Number(Boolean(b.remote)) ||
+      Number(Boolean(b.current)) - Number(Boolean(a.current)) || a.name.localeCompare(b.name));
+  let group = "";
+  for (const branch of choices) {
+    const nextGroup = branch.tag ? "标签" : branch.remote ? "远程分支" : "本地分支";
+    if (nextGroup !== group) { group = nextGroup; target.append(el("h3", "history-choice-group", () => GitI18n.t(nextGroup))); }
+    const label = el("label", "history-branch-choice");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox"; checkbox.checked = historySelectionDraft.has(branch.ref);
+    checkbox.value = branch.ref;
+    GitI18n.attr(checkbox, "aria-label", () => branch.name + (branch.tag ? GitI18n.t(" · 标签") : ""));
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) historySelectionDraft.add(branch.ref); else historySelectionDraft.delete(branch.ref);
+      updateHistorySelectionCount();
+    });
+    label.append(checkbox, GitUI.icon(branch.tag ? "tag" : "branch"), el("span", "history-choice-name", branch.name));
+    label.title = branch.ref;
+    if (branch.current) label.append(el("span", "badge current", () => GitI18n.t("当前")));
+    target.append(label);
+  }
+  if (!choices.length) empty(target, () => GitI18n.t("没有匹配的分支或标签"), null, true);
+  updateHistorySelectionCount();
+}
+function openHistoryChoices() {
+  historySelectionDraft = new Set(historyScope.refs);
+  $("history-branch-search").value = "";
+  renderHistoryChoices();
+  $("history-branches-dialog").showModal();
+  $("history-branch-search").focus();
+}
+$("history-scope").addEventListener("change", () => {
+  if (historyScope.configure($("history-scope").value)) { updateHistoryScope(); loadHistory(); }
+  else { updateHistoryScope(); openHistoryChoices(); }
+});
+$("choose-history-branches").addEventListener("click", openHistoryChoices);
+$("history-branch-search").addEventListener("input", renderHistoryChoices);
+$("history-default-branches").addEventListener("click", () => {
+  historySelectionDraft = new Set(GitHistoryScope.defaults(state.branches)); renderHistoryChoices();
+});
+$("history-clear-branches").addEventListener("click", () => { historySelectionDraft.clear(); renderHistoryChoices(); });
+for (const id of ["close-history-branches", "cancel-history-branches"]) {
+  $(id).addEventListener("click", () => $("history-branches-dialog").close());
+}
+$("apply-history-branches").addEventListener("click", () => {
+  if (!historyScope.configure("selected", [...historySelectionDraft])) return;
+  $("history-branches-dialog").close(); updateHistoryScope(); loadHistory();
+});
+$("history-branches-dialog").addEventListener("close", () => $("choose-history-branches").focus());
 function closeDetail() {
   state.detailVersion++; state.patchVersion++;
   controllers.get("commit")?.abort(); controllers.get("patch")?.abort();
@@ -504,7 +621,8 @@ function applyFilters() {
 bindForm($("filters"), $("search-commits"), applyFilters);
 $("first-parent").addEventListener("change", applyFilters);
 $("clear-filters").addEventListener("click", () => {
-  $("filters").reset(); state.filters = {query: "", author: "", first_parent: false}; loadHistory();
+  $("commit-search").value = ""; $("author-search").value = ""; $("first-parent").checked = false;
+  state.filters = {query: "", author: "", first_parent: false}; loadHistory();
 });
 $("refresh").addEventListener("click", () => refresh());
 $("load-more").addEventListener("click", () => loadHistory(true));

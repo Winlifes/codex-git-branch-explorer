@@ -69,6 +69,8 @@ class McpTests(unittest.TestCase):
             self.assertNotIn('src="./' + name + '.js"', resource["text"])
         self.assertIn('const GitCommitGraph =', resource["text"])
         self.assertIn('const GitFileTree =', resource["text"])
+        self.assertNotIn('src="./history-scope.js"', resource["text"])
+        self.assertIn('const GitHistoryScope =', resource["text"])
 
     def test_host_metadata_follows_the_requested_locale(self):
         for locale, expected in (("zh-CN", "Git 分支"), ("en-GB", "Git Branches"), ("fr-FR", "Git Branches")):
@@ -113,6 +115,22 @@ class McpTests(unittest.TestCase):
     def test_non_repo_has_actionable_picker(self):
         result = Server(self.temp.name).call("git_panel", {})["_meta"]["gitExplorer"]
         self.assertTrue(result["needs_repository"])
+
+    def test_multi_branch_queries_preserve_arrays_and_snapshot_through_mcp(self):
+        tool = next(t for t in self.rpc("tools/list")["tools"] if t["name"] == "git_query")
+        self.assertIn("all_branches", tool["inputSchema"]["properties"])
+        self.assertEqual(tool["inputSchema"]["properties"]["refs"]["type"], "array")
+        result = self.rpc("tools/call", name="git_query", arguments={"action":"commits", "all_branches":True})
+        self.assertFalse(result.get("isError"), result)
+        data = result["_meta"]["gitExplorer"]
+        self.assertEqual(data["snapshot"], [self.sha])
+        self.assertEqual(data["log_context"]["repository"]["head"], self.sha)
+        self.assertEqual(len(data["log_context"]["branches"]), 2)
+        frozen = self.rpc("tools/call", name="git_query", arguments={"action":"commits", "snapshot":data["snapshot"]})
+        self.assertEqual(frozen["_meta"]["gitExplorer"]["commits"], data["commits"])
+        self.assertNotIn("log_context", frozen["_meta"]["gitExplorer"])
+        invalid = self.rpc("tools/call", name="git_query", arguments={"action":"commits", "refs":["--all"]})
+        self.assertTrue(invalid["isError"])
 
     def test_invalid_requests_do_not_run_git_commands(self):
         for arguments in ({"action": "checkout"}, {"action": "commits", "first_parent": "false"},
