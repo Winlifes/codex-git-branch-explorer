@@ -5,6 +5,7 @@ from __future__ import annotations
 from i18n import Message, ui, error_message, message_paths, message_spec, translate
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -48,16 +49,15 @@ def bounded_int(value, default, minimum, maximum):
 
 
 class Repository:
-    def __init__(self, path):
+    def __init__(self, path, *, deadline=None):
         self.path = str(Path(path).expanduser().resolve())
         if not Path(self.path).is_dir():
             raise GitError(ui("仓库目录不存在或无法访问。"), "directory_unavailable")
-        self.git("rev-parse", "--git-dir")
-        self.bare = self.git("rev-parse", "--is-bare-repository").strip() == b"true"
-        root = self.git("rev-parse", "--absolute-git-dir" if self.bare else "--show-toplevel")
-        self.path = decode(root).strip()
+        self.bare = self.git("rev-parse", "--is-bare-repository", deadline=deadline).strip() == b"true"
+        root = self.git("rev-parse", "--absolute-git-dir" if self.bare else "--show-toplevel", deadline=deadline)
+        self.path = str(Path(decode(root).rstrip("\r\n")))
 
-    def git(self, *args, optional=False, cap=MAX_OUTPUT, truncate=False):
+    def git(self, *args, optional=False, cap=MAX_OUTPUT, truncate=False, input_data=None, deadline=None):
         # Commands are read-only; do not invoke hooks, external diff or textconv.
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
         env.update(GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
@@ -69,15 +69,22 @@ class Repository:
                "-c", "diff.renames=false", *args]
         try:
             # File-backed output prevents huge diffs from filling Python memory.
-            with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-                process = subprocess.Popen(cmd, stdout=out, stderr=err, env=env)
-                deadline = time.monotonic() + 25
+            with ExitStack() as stack:
+                out = stack.enter_context(tempfile.TemporaryFile())
+                err = stack.enter_context(tempfile.TemporaryFile())
+                stdin = subprocess.DEVNULL
+                if input_data is not None:
+                    stdin = stack.enter_context(tempfile.TemporaryFile())
+                    stdin.write(input_data)
+                    stdin.seek(0)
+                deadline = min(deadline, time.monotonic() + 25) if deadline is not None else time.monotonic() + 25
+                process = subprocess.Popen(cmd, stdin=stdin, stdout=out, stderr=err, env=env)
                 limited = False
                 while process.poll() is None:
                     if time.monotonic() > deadline:
                         process.kill()
                         process.wait()
-                        raise GitError(ui("Git 查询超时，请缩小查询范围后重试。"))
+                        raise GitError(ui("Git 查询超时，请缩小查询范围后重试。"), "query_timeout")
                     if os.fstat(out.fileno()).st_size > cap:
                         limited = True
                         process.kill()
@@ -147,6 +154,10 @@ class Repository:
                              "sha": sha, "date": date, "subject": subject, "author": author,
                              "upstream": upstream, "tracking": tracking, "remote": remote,
                              "current": ref == info["current_ref"], "unborn": False})
+            if ref == info["current_ref"]:
+                # The attached ref may have advanced or received its first commit
+                # since info() ran. Use the tip from this same branch listing.
+                info["head"] = sha
         if info["current_ref"] and not info["head"]:
             branches.insert(0, {"ref": info["current_ref"], "name": info["current_ref"].removeprefix("refs/heads/"),
                                 "sha": None, "date": "", "subject": ui("尚无提交"), "author": "",
@@ -214,10 +225,6 @@ class Repository:
             context = {"log_context": catalog}
             info = catalog["repository"]
             known = {item["ref"]: item["sha"] for item in catalog["branches"] + catalog["tags"]}
-            # The attached branch may advance between info() and for-each-ref.
-            # Decorate the same branch tip that supplies this query's roots.
-            if info["current_ref"] in known:
-                info["head"] = known[info["current_ref"]]
             known["HEAD"] = info["head"]
             if info["head"]:
                 known[info["head"]] = info["head"]
@@ -239,7 +246,8 @@ class Repository:
         frozen = roots if multiple else roots[0]
         if not roots:
             return {"commits": [], "has_more": False, "next_offset": 0, "snapshot": frozen, **context}
-        args = ["log", "-z", "--date-order", "--no-decorate", "--encoding=UTF-8", "--format=" + FORMAT,
+        args = ["log", "-z", "--date-order" if multiple else "--topo-order", "--no-decorate",
+                "--encoding=UTF-8", "--format=" + FORMAT,
                 "--max-count=" + str(limit + 1), "--skip=" + str(offset), "--fixed-strings", "--regexp-ignore-case"]
         if query:
             args.append("--grep=" + query)
@@ -247,7 +255,9 @@ class Repository:
             args.append("--author=" + author)
         if first_parent:
             args.append("--first-parent")
-        items = self.parse_commits(self.git(*args, *roots, "--"))
+        # Thousands of branch tips can exceed the OS process argument limit.
+        revisions = ("\n".join(roots) + "\n").encode("ascii")
+        items = self.parse_commits(self.git(*args, "--stdin", "--", input_data=revisions))
         page = items[:limit]
         try:
             stats = self.commit_stats([item["sha"] for item in page])
@@ -406,8 +416,29 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == self.server.prefix + "api/stop":
             self.send(200, {"stopped": True})
             threading.Thread(target=self.server.shutdown, daemon=True).start()
+        elif parsed.path == self.server.prefix + "api/commits":
+            self.post_history()
         else:
             self.send(405, {"error": ui("此浏览器只提供读取操作。")})
+
+    def post_history(self):
+        # Large snapshots do not fit in the HTTP request line.
+        if not self.server.slots.acquire(blocking=False):
+            self.send(429, {"error": ui("查询繁忙，请稍后重试。")})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if self.headers.get_content_type() != "application/json" or not 1 <= length <= 1_000_000:
+                raise GitError(ui("无效的查询参数。"))
+            self.connection.settimeout(5)
+            params = json.loads(self.rfile.read(length))
+            self.send(200, self.server.repo.commits(**params))
+        except (GitError, ValueError, TypeError) as error:
+            self.send(400, {"error": error_message(error)})
+        except TimeoutError:
+            self.send(408, {"error": ui("无效的查询参数。")})
+        finally:
+            self.server.slots.release()
 
     def do_GET(self):
         parsed = self.allowed_path()

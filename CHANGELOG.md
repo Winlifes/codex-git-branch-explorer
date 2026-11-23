@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2 — 2026-11-22
+
+- Find Git repositories beneath the current workspace folder and offer a picker when multiple repositories are found. Reopen the picker with the folder button to switch repositories.
+- Keep multi-branch history pagination working with large ref sets on systems with shorter command line or HTTP request line limits.
+- Use the catalog's committed tip if the current branch receives its first commit during a refresh.
+- Send MCP responses as UTF-8 on systems using legacy code pages. On Windows, the installer uses the Python executable that ran the installer.
+
 ## 0.8.1 — 2026-11-11
 
 - Clearing text/author/first-parent filters preserves the chosen log scope and keeps the scope control in sync, so switching back to all branches remains effective.

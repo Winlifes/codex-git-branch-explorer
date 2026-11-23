@@ -39,7 +39,7 @@ const GitHistoryScope = (() => {
     }
   }
   function references(branches, tags, sha) {
-    return [...branches, ...tags].filter(branch => branch.sha === sha).sort((a, b) =>
+    return [...branches, ...tags].filter(branch => !branch.detached && branch.sha === sha).sort((a, b) =>
       Number(Boolean(b.current)) - Number(Boolean(a.current)) || Number(Boolean(a.tag)) - Number(Boolean(b.tag)) ||
       Number(!/^(origin\/)?(master|main)$/.test(a.name)) - Number(!/^(origin\/)?(master|main)$/.test(b.name)) ||
       a.name.localeCompare(b.name));

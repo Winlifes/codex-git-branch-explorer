@@ -67,7 +67,7 @@ window.GitWorkbench = (() => {
     next.focus({preventScroll: true}); next.scrollIntoView({block: "nearest"}); next.click();
   });
   document.addEventListener("keydown", event => {
-    if (document.querySelector("dialog[open]") || event.isComposing) return;
+    if (document.querySelector("dialog[open]") || !$("repo-picker").hidden || event.isComposing) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
       event.preventDefault(); view("history"); $("commit-search").focus(); $("commit-search").select();
     } else if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && mode === "workspace") {

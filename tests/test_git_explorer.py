@@ -211,6 +211,28 @@ class GitExplorerTests(unittest.TestCase):
         self.assertEqual(current["sha"], advanced[0])
         self.assertIn(advanced[0], data["snapshot"])
 
+    def test_first_commit_appearing_during_catalog_read_has_one_current_branch(self):
+        empty = self.root / "new-project"
+        subprocess.check_output(["git", "init", "-b", "main", str(empty)], env=self.env, stderr=subprocess.PIPE)
+        repo = Repository(empty)
+        read_info = repo.info
+
+        def read_then_create_first_commit():
+            info = read_info()
+            subprocess.check_output(["git", "-C", str(empty), "-c", "commit.gpgsign=false", "commit",
+                                     "--allow-empty", "-m", "First commit"], env=self.env, stderr=subprocess.PIPE)
+            return info
+
+        with mock_patch.object(repo, "info", side_effect=read_then_create_first_commit):
+            data = repo.commits(all_branches=True)
+        catalog = data["log_context"]
+        self.assertEqual(len(catalog["branches"]), 1)
+        branch = catalog["branches"][0]
+        self.assertTrue(branch["current"])
+        self.assertFalse(branch["unborn"])
+        self.assertEqual(data["snapshot"], [branch["sha"]])
+        self.assertEqual(catalog["repository"]["head"], branch["sha"])
+
     def test_multi_branch_range_rejects_invalid_refs_and_snapshot_injection(self):
         cases = [dict(refs=[]), dict(refs="refs/heads/main"), dict(refs=[3]), dict(refs=["--all"]),
                  dict(refs=["HEAD~1"]), dict(refs=["refs/heads/missing"]), dict(refs=["HEAD"] * 4097),
@@ -254,6 +276,31 @@ class GitExplorerTests(unittest.TestCase):
         result = json.loads(subprocess.check_output([sys.executable, str(script), "log", "--repo", str(self.path), "--all-branches"]))
         self.assertEqual({c["sha"] for c in result["commits"]}, {self.main, self.feature, self.initial})
         self.assertEqual(urllib.request.urlopen(server.url + "history-scope.js").status, 200)
+
+    def test_large_history_snapshot_fits_git_and_http_transport(self):
+        records = []
+        for index in range(1700):
+            subject = f"Branch tip {index}"
+            records.append(f"commit refs/remotes/mirror/topic-{index}\n"
+                           f"committer Test <test@example.test> {1700000000 + index} +0000\n"
+                           f"data {len(subject)}\n{subject}\nfrom {self.initial}\n\n")
+        subprocess.run(["git", "-C", str(self.path), "fast-import", "--quiet"],
+                       input="".join(records).encode(), env=self.env, check=True, capture_output=True, timeout=20)
+        first = self.repo.commits(all_branches=True, limit=1)
+        self.assertEqual(len(first["snapshot"]), 1703)
+        server = ExplorerServer(self.repo)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        body = json.dumps({"snapshot": first["snapshot"], "offset": first["next_offset"], "limit": 1}).encode()
+        self.assertGreater(len(body), 65536)
+        request = urllib.request.Request(server.url + "api/commits", data=body,
+                                         headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            next_page = json.load(response)
+        self.assertEqual(next_page["snapshot"], first["snapshot"])
+        self.assertNotEqual(next_page["commits"][0]["sha"], first["commits"][0]["sha"])
+        self.assertEqual(next_page["next_offset"], 2)
 
     def test_root_commit_and_patch(self):
         data = self.repo.commit(self.initial)

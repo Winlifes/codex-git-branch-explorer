@@ -81,6 +81,8 @@ python3 scripts/install.py
 
 也可以从 [Releases](https://github.com/Winlifes/codex-git-branch-explorer/releases/latest) 下载并解压 ZIP，在解压后的插件目录执行 `python3 scripts/install.py`。
 
+Windows 上可用已安装的 Python 运行 `py -3 scripts/install.py`。安装器会用同一个 Python 启动 MCP 服务。
+
 安装器将插件复制到 `~/plugins/git-branch-explorer`，配置本机 MCP 启动路径，注册到个人插件市场，再运行 `codex plugin add`。如果找不到 Codex CLI，会显示可手动执行的命令。
 
 ### 打开面板
@@ -93,6 +95,8 @@ python3 scripts/install.py
 
 插件在能够取得项目目录时，自动打开当前任务对应的仓库，包括任务使用的 worktree。新任务尚未发送首条消息时，客户端可能还没有提供目录。面板会显示消息与项目上下文检查提示：发送消息后关闭并重新打开 Git 面板，或手动选择仓库。取得项目目录后，面板会检查其中的 Git 仓库，并显示具体错误。
 
+如果工作区是存放多个 Git 项目的目录，插件会检查其下两层子目录。只找到一个仓库时直接打开，找到多个时按名称和路径列出候选项。点击工具栏的文件夹按钮可切换仓库或重新检查，也可以输入完整路径打开检查范围以外的仓库。
+
 ### 界面语言
 
 面板优先使用 Codex 传入的语言。英文语言区域显示英文，中文语言区域显示简体中文，其他语言暂时回退为英文。宿主没有提供语言信息时，使用宿主页面的 HTML 语言或浏览器语言。
@@ -103,7 +107,7 @@ python3 scripts/install.py
 
 ### 已安装用户
 
-当前需要手动更新。若 `~/plugins/git-branch-explorer` 已存在，且与安装来源不同，安装器会停止，避免从另一个目录安装时覆盖现有文件。当前开发者更新流程见[实现文档：验证与更新](docs/architecture.md#验证与更新)。
+从发布包更新时，先把已有的 `~/plugins/git-branch-explorer` 目录移到备份位置，再从新版 ZIP 的解压目录运行安装器。如果安装器打印了 `codex plugin add` 命令，执行该命令加载新版本。若面板仍显示旧版，等正在运行的任务完成后重启 Codex。
 
 ## 运行截图
 

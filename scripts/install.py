@@ -22,6 +22,10 @@ def configure_mcp(destination, codex_home=None):
     path = destination / ".mcp.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     server = data["mcpServers"]["git-branches"]
+    if os.name == "nt":
+        # The installer may have been launched with py or python; python3 can
+        # resolve to a Windows Store alias instead of the Python we just ran.
+        server["command"] = sys.executable
     server["args"] = [str(destination / "scripts/mcp_server.py")]
     # Codex filters inherited MCP environment variables. Pass its metadata root
     # explicitly so the server can resolve the caller's task, including custom homes.

@@ -22,6 +22,8 @@ class ProjectContextTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.home = self.root / "codex-data"
         self.home.mkdir()
+        self.empty = self.root / "empty directory"
+        self.empty.mkdir()
         self.repo_a = self.root / "项目 A"
         self.repo_b = self.root / "项目 B"
         self.env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -93,16 +95,16 @@ class ProjectContextTests(unittest.TestCase):
         self.assertEqual(result["repository"]["current_ref"], "refs/heads/worktree-branch")
 
     def test_non_git_task_does_not_fall_back_to_another_project_or_process_cwd(self):
-        self.task("non-git-task", self.root)
+        self.task("non-git-task", self.empty)
         self.server = Server(cwd=self.repo_b, codex_home=self.home)
         self.desktop({"non-git-task": {"projectKind": "local", "projectId": "a"}})
         result = self.call("non-git-task")
         self.assertTrue(result["needs_repository"])
-        self.assertEqual(result["suggested_path"], str(self.root))
+        self.assertEqual(result["suggested_path"], str(self.empty))
         self.assertIn("不是 Git 仓库", result["reason"])
         self.assertEqual(result["context"]["message_status"], "sent")
         self.assertEqual(result["context"]["repository_status"], "not_found")
-        self.assertEqual(result["context"]["paths"], [str(self.root)])
+        self.assertEqual(result["context"]["paths"], [str(self.empty)])
 
     def test_old_task_after_project_move_uses_its_updated_project_assignment(self):
         self.task("old-task", self.root / "removed-old-checkout")
@@ -130,6 +132,56 @@ class ProjectContextTests(unittest.TestCase):
         result = self.call("task-a", "git_query", action="branches", repo=str(self.repo_b))
         self.assertEqual(result["repository"]["path"], str(self.repo_b))
 
+    def test_workspace_with_sibling_repositories_opens_the_selected_history(self):
+        self.task("workspace", self.root)
+        result = self.call("workspace")
+        self.assertTrue(result["needs_repository"])
+        self.assertEqual(result["context"]["repository_status"], "multiple")
+        self.assertEqual([item["path"] for item in result["repositories"]], [str(self.repo_a), str(self.repo_b)])
+        for candidate, branch in zip(result["repositories"], ("project-a", "project-b")):
+            path = candidate["path"]
+            branches = self.call("workspace", "git_query", action="branches", repo=path)
+            self.assertEqual(branches["repository"]["current_ref"], "refs/heads/" + branch)
+            history = self.call("workspace", "git_query", action="commits", repo=path, all_branches=True)
+            self.assertEqual([item["subject"] for item in history["commits"]], [branch + " first commit"])
+        rechecked = self.call("workspace", "git_query", action="branches")
+        self.assertEqual(rechecked["repositories"], result["repositories"])
+
+    def test_nested_worktree_is_discovered_but_other_tasks_keep_their_own_checkout(self):
+        group = self.empty / "group"
+        group.mkdir()
+        worktree = group / "feature worktree"
+        self.git(self.repo_a, "worktree", "add", "-b", "feature", str(worktree))
+        self.task("workspace", self.empty)
+        self.task("task-a", self.repo_a)
+        self.assertEqual(self.call("workspace")["repository"]["path"], str(worktree))
+        self.assertEqual(self.call("task-a")["repository"]["path"], str(self.repo_a))
+
+    def test_discovery_does_not_follow_a_directory_symlink_or_probe_process_cwd(self):
+        alias = self.empty / "directory link"
+        try:
+            alias.symlink_to(self.repo_a, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(str(error))
+        self.task("workspace", self.empty)
+        result = self.call("workspace")
+        self.assertEqual(result["context"]["repository_status"], "not_found")
+        self.assertEqual(result["repositories"], [])
+        # A less specific launcher cwd is not a task workspace, even if it
+        # contains repositories. Keep the preexisting exact cwd lookup.
+        launcher = Server(cwd=self.root, codex_home=self.home)
+        result = launcher.call("git_panel", {})["_meta"]["gitExplorer"]
+        self.assertEqual(result["repositories"], [])
+
+    def test_scan_limit_is_not_reported_as_no_git_repository(self):
+        for name in ("first", "second"):
+            (self.empty / name).mkdir()
+        self.task("workspace", self.empty)
+        with patch("repository_discovery.MAX_ENTRIES", 1):
+            result = self.call("workspace")
+        self.assertEqual(result["context"]["repository_status"], "partial")
+        self.assertEqual(result["suggested_path"], str(self.empty))
+
     def test_invalid_or_conflicting_metadata_and_unreadable_state_never_guess(self):
         context = ProjectContext(self.home)
         for meta in ({"threadId": []}, {"threadId": "../escape"}, {"threadId": "a", "thread_id": "b"}):
@@ -141,17 +193,17 @@ class ProjectContextTests(unittest.TestCase):
         self.assertIsNone(context.paths({}))
 
     def test_persisted_no_message_flag_and_refresh_after_first_message(self):
-        self.task("draft", self.root, has_user_event=0)
+        self.task("draft", self.empty, has_user_event=0)
         result = self.call("draft")
         self.assertEqual(result["context"]["message_status"], "not_sent")
         self.assertEqual(result["context"]["repository_status"], "not_found")
-        self.task("draft", self.root, has_user_event=1)
+        self.task("draft", self.empty, has_user_event=1)
         result = self.call("draft", "git_query", action="branches")
         self.assertEqual(result["context"]["message_status"], "sent")
         self.assertEqual(result["context"]["repository_status"], "not_found")
-        self.git(self.root, "init", "-b", "main")
+        self.git(self.empty, "init", "-b", "main")
         result = self.call("draft", "git_query", action="branches")
-        self.assertEqual(result["repository"]["path"], str(self.root))
+        self.assertEqual(result["repository"]["path"], str(self.empty))
 
     def test_ephemeral_task_never_claims_no_messages_or_no_repository(self):
         self.task("other-task", self.repo_a)
@@ -164,7 +216,7 @@ class ProjectContextTests(unittest.TestCase):
 
     def test_git_and_directory_errors_are_not_reported_as_missing_repository(self):
         self.task("task-a", self.repo_a)
-        with patch("mcp_server.Repository", side_effect=GitError("找不到 Git。", "git_unavailable")):
+        with patch("repository_discovery.Repository", side_effect=GitError("找不到 Git。", "git_unavailable")):
             result = self.call("task-a")
         self.assertEqual(result["context"]["repository_status"], "unavailable")
         self.assertEqual(result["context"]["error"], "找不到 Git。")
@@ -177,7 +229,7 @@ class ProjectContextTests(unittest.TestCase):
     def test_older_schema_without_message_flag_remains_usable(self):
         with sqlite3.connect(self.home / "state_5.sqlite") as connection:
             connection.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, cwd TEXT)")
-            connection.execute("INSERT INTO threads VALUES (?, ?)", ("older-task", str(self.root)))
+            connection.execute("INSERT INTO threads VALUES (?, ?)", ("older-task", str(self.empty)))
         result = self.call("older-task")
         self.assertEqual(result["context"]["message_status"], "unknown")
         self.assertEqual(result["context"]["repository_status"], "not_found")

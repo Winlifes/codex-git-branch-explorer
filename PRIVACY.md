@@ -6,6 +6,8 @@
 
 插件在用户电脑上调用 Git，读取选定仓库的路径、分支、提交作者与时间、提交信息、文件差异、暂存区及工作区状态。为定位当前项目，会只读查询本机 Codex 的任务目录和项目关联，并读取已有消息标记；不读取任务消息正文。
 
+如果任务目录包含多个项目，插件会在该目录下有限地检查 Git 仓库标记，并在面板列出候选路径。
+
 这些查询结果经本地 MCP 传给 Codex 宿主及插件面板。本地运行不表示数据不会传给 Codex；Codex 对数据的处理由用户与 OpenAI 的设置和条款决定。
 
 提交说明为空时，草稿生成会读取本次提交范围内的本地文件或暂存区对象，提取文件变化、增删行与可识别的符号名称。生成在本地完成，不调用外部 AI 服务；草稿及编辑结果通过 MCP 传给面板。只有确认提交后才写入 Git 提交信息；确认推送后提交信息会随提交发送到远程仓库。
@@ -35,6 +37,8 @@
 ## English
 
 The plugin runs Git locally and reads the selected repository's paths, branches, commit metadata, file diffs, index and working tree. It also reads local Codex task/project metadata and message-presence flags to identify the active project, without reading message bodies.
+
+For a workspace containing separate projects, a bounded search checks for Git repository markers inside the workspace and lists candidate paths in the panel.
 
 Query results are passed to the Codex host and panel through MCP. There is no maintainer-operated cloud service, telemetry or analytics. Confirmed Git remote operations use the repository's configured remotes and the user's Git credentials, hooks and signing settings.
 

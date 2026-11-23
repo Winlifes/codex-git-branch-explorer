@@ -84,6 +84,8 @@ python3 scripts/install.py
 
 Alternatively, download and extract a ZIP from [Releases](https://github.com/Winlifes/codex-git-branch-explorer/releases/latest), then run `python3 scripts/install.py` from the extracted plugin directory.
 
+On Windows, run `py -3 scripts/install.py` with your installed Python. The installer uses that Python executable to launch the MCP server.
+
 The installer copies the plugin to `~/plugins/git-branch-explorer`, configures the local MCP launch path, registers it in your personal plugin marketplace and runs `codex plugin add`. If it cannot find the Codex CLI, it prints the command to run manually.
 
 ### Open the panel
@@ -96,6 +98,8 @@ If the entry is missing after installation, let running tasks finish, quit and r
 
 The plugin uses the current task's project directory when available, including its worktree. A new task may not expose that directory before its first message. The panel then displays message/context checks: send a message, close and reopen the Git panel, or choose a repository manually. Once the project directory is available, the panel checks it for Git repositories and shows any specific error.
 
+If the workspace is a folder containing separate Git projects, the plugin checks up to two levels below it. A single repository opens automatically. When there are multiple candidates, choose one by name and path. Use the folder button in the toolbar to switch or check again. You can enter the full path of a repository outside the search range.
+
 ### Language
 
 The panel uses the language supplied by Codex. English locales use English UI; Chinese locales use Simplified Chinese UI. Other languages currently fall back to English. If the host does not supply a locale, the panel uses the host's HTML language or the browser language.
@@ -106,7 +110,7 @@ The native tab label is controlled and may be cached by Codex. After installing 
 
 ### Existing installations
 
-Updates are manual. The installer stops if `~/plugins/git-branch-explorer` already exists and is different from the installation source, so running it from another checkout does not overwrite your files. The current developer update workflow is described in [Architecture: validation and updates (Chinese)](docs/architecture.md#验证与更新).
+To update from a release ZIP, move the existing `~/plugins/git-branch-explorer` folder to a backup location, then run the installer from the new archive's extracted folder. If the installer prints a `codex plugin add` command, run it to load the package. Restart Codex after running tasks finish if the panel still shows the previous version.
 
 ## Screenshots
 

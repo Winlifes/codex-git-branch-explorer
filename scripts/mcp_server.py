@@ -15,6 +15,7 @@ from git_explorer import GitError, Repository
 from git_operations import ACTIONS, Operations, status, working_patch
 from github_setup import GithubSetup
 from project_context import ProjectContext
+from repository_discovery import discover
 
 ROOT = Path(__file__).resolve().parents[1]
 # Codex compares cached thread entrypoints with newly discovered tools before
@@ -22,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 URI = "ui://git-branch-explorer/v0.5/panel.html"
 PREVIOUS_URI = "ui://git-branch-explorer/v0.5.1/panel.html"
 MIME = "text/html;profile=mcp-app"
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False,
                "idempotentHint": True, "openWorldHint": False}
 REPO_PROPERTY = {"type": "string", "description": ui("本地 Git 仓库的绝对路径；省略时自动读取当前 Codex 任务的项目目录。")}
@@ -184,28 +185,26 @@ class Server:
         if name in {"git_prepare", "git_apply"} and not explicit_path:
             raise GitError(ui("执行操作前必须明确选择仓库。"))
         if explicit_path:
-            repo_path = explicit_path
+            if "\0" in explicit_path or len(explicit_path) > 8192:
+                raise GitError(ui("仓库路径无效。"))
+            if not Path(explicit_path).expanduser().is_absolute():
+                raise GitError(ui("请输入仓库的绝对路径。"))
+            repo = Repository(explicit_path)
         else:
             context = self.context.inspect(metadata)
             paths = context["paths"]
             # CLI callers without task metadata retain the standalone cwd behavior.
+            scan_workspace = paths is not None
             if paths is None:
                 paths = [self.cwd]
-            repositories = {}
-            failures = []
-            for path in paths:
-                try:
-                    candidate = Repository(path)
-                    repositories[candidate.path] = candidate
-                except GitError as error:
-                    failures.append(error)
-            if len(repositories) == 1:
-                repo_path = next(iter(repositories))
+            repositories, failed, limited = discover(paths, scan_workspace=scan_workspace)
+            if len(repositories) == 1 and not limited:
+                repo = next(iter(repositories.values()))
             else:
-                failed = next((error for error in failures if error.kind != "not_repository"), None)
-                repository_status = ("multiple" if repositories else "pending" if not paths else
+                repository_status = ("partial" if limited else "multiple" if repositories else "pending" if not paths else
                                      "unavailable" if failed else "not_found")
-                reason = (ui("当前项目包含多个 Git 仓库，请选择要查看的仓库。") if repositories else
+                reason = (ui("未能检查整个工作区。请选择已找到的仓库，或手动输入仓库路径。") if limited else
+                          ui("当前项目包含多个 Git 仓库，请选择要查看的仓库。") if repositories else
                           ui("暂时无法检查当前项目的 Git 仓库，请查看下方原因后重试。") if failed else
                           ui("当前项目目录不是 Git 仓库。请选择已有仓库，或在项目中初始化 Git 后重新检查。") if paths else
                           ui("已检测到用户消息，但暂未取得项目目录。请关闭并重新打开「Git 分支」。") if context["message_status"] == "sent" else
@@ -216,20 +215,11 @@ class Server:
                                     "repository_status": repository_status, "paths": paths,
                                     "error": error_message(failed) if failed else None},
                         "suggested_path": paths[0] if len(paths) == 1 and Path(paths[0]).parent != Path(paths[0]) else "",
-                        "repositories": [{"path": path, "name": Path(path).name} for path in repositories]}
+                        "repositories": [{"path": path, "name": Path(path).name}
+                                         for path in sorted(repositories, key=lambda path: (path.casefold(), path))]}
                 if name == "git_panel" or args.get("action") == "branches":
                     return packed(data)
                 raise GitError(reason)
-        if "\0" in repo_path or len(repo_path) > 8192:
-            raise GitError(ui("仓库路径无效。"))
-        if not Path(repo_path).expanduser().is_absolute():
-            raise GitError(ui("请输入仓库的绝对路径。"))
-        try:
-            repo = Repository(repo_path)
-        except GitError:
-            if name == "git_panel" and not explicit_path:
-                return packed({"needs_repository": True, "suggested_path": repo_path})
-            raise
         action = "branches" if name == "git_panel" else args.get("action")
         owner = json.dumps({k: metadata[k] for k in ("threadId", "thread_id") if k in metadata}, sort_keys=True) if isinstance(metadata, dict) else "{}"
         if name == "git_prepare":
@@ -327,7 +317,9 @@ def main():
         except (ValueError, UnicodeDecodeError):
             response = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}
         if response is not None:
-            print(json.dumps(response, ensure_ascii=False, separators=(",", ":")), flush=True)
+            # MCP uses UTF-8 even when a Windows pipe inherits a legacy code page.
+            sys.stdout.buffer.write((json.dumps(response, separators=(",", ":")) + "\n").encode("ascii"))
+            sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":

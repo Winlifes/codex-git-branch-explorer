@@ -441,6 +441,7 @@ window.GitOperations = (() => {
   document.addEventListener("git-repository-loaded", () => {
     if (repository !== selectedRepository) {
       repository = selectedRepository; current = null;
+      document.querySelectorAll("[data-network]").forEach(button => { button.disabled = true; });
       $("commit-message").value = ""; $("operation-result").hidden = true;
       $("work-result").hidden = true;
       selected.clear(); selectionInitialized = false; activeWorkPath = ""; workPatchData = null; workPatchVersion++;

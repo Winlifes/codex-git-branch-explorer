@@ -7,6 +7,7 @@ const state = {branches: [], tags: [], repository: null, branch: null, kind: "al
 const controllers = new Map();
 const nativeHost = window.GitHost;
 let selectedRepository = "";
+let repositoryChoices = null;
 let folderStorage;
 try { folderStorage = localStorage; } catch {}
 const branchExpansion = new GitBranchTree.Expansion(folderStorage);
@@ -72,9 +73,16 @@ async function api(route, params = {}, channel = route, method = "GET") {
       if (selectedRepository) args.repo = selectedRepository;
       return await nativeHost.query(route, args, controller.signal);
     }
-    const encoded = Object.entries(params).map(([key, value]) => [key, Array.isArray(value) ? JSON.stringify(value) : value]);
-    const response = await fetch("./api/" + route + "?" + new URLSearchParams(encoded),
-      {signal: controller.signal, cache: "no-store", method});
+    const options = {signal: controller.signal, cache: "no-store", method};
+    let url = "./api/" + route;
+    if (route === "commits") {
+      options.method = "POST";
+      options.headers = {"Content-Type": "application/json"};
+      options.body = JSON.stringify(params);
+    } else {
+      url += "?" + new URLSearchParams(params);
+    }
+    const response = await fetch(url, options);
     const body = await response.json();
     GitI18n.hydrate(body, body._gitMessages);
     if (!response.ok) throw GitI18n.error(() => body.error || GitI18n.t("查询失败。"));
@@ -95,6 +103,7 @@ function closeBranches() {
 }
 function renderBranches() {
   const target = $("branches");
+  GitI18n.text($("branch-count"), () => state.branches.filter(branch => !branch.detached).length);
   const hadFocus = target.contains(document.activeElement), scrollTop = target.scrollTop;
   const previousId = hadFocus ? document.activeElement.dataset.treeId : branchFocusId;
   target.replaceChildren();
@@ -216,23 +225,30 @@ $("branches").addEventListener("keydown", event => {
     visibleRow.scrollIntoView({block: "nearest"});
   }
 });
-async function refresh(initialData = null) {
+async function refresh(initialData = null, {resolveWorkspace = false} = {}) {
   const version = ++state.branchesVersion;
   $("refresh").disabled = true;
   clearError();
   try {
-    const data = initialData || await api("branches");
+    const data = initialData || await (resolveWorkspace ? nativeHost.query("branches", {}) : api("branches"));
     if (version !== state.branchesVersion) return;
     if (data.needs_repository) {
+      repositoryChoices = data;
       showRepositoryPicker(data);
       return;
     }
+    if (resolveWorkspace) repositoryChoices = null;
     const changedRepository = selectedRepository !== data.repository.path;
+    if (changedRepository) {
+      for (const controller of controllers.values()) controller.abort();
+      state.branch = null;
+      branchFocusId = "";
+    }
     state.repository = data.repository;
     selectedRepository = data.repository.path;
     $("repo-input").value = selectedRepository;
     $("repo-picker").hidden = true;
-    document.querySelector(".workspace").hidden = false;
+    document.body.classList.remove("picking-repository");
     state.branches = data.branches;
     state.tags = data.tags || [];
     const repo = data.repository;
@@ -243,7 +259,6 @@ async function refresh(initialData = null) {
     GitI18n.text(document.querySelector("title"), () => repo.name + GitI18n.t(" · Git 分支"));
     GitI18n.text($("repo-path"), () => repo.path);
     GitI18n.attr($("repo-path"), "title", () => repo.path);
-    GitI18n.text($("branch-count"), () => data.branches.filter(b => !b.detached).length);
     const notes = [];
     if (repo.shallow) notes.push("这是浅克隆：仅展示本地已下载的历史。");
     if (repo.bare) notes.push("当前打开的是裸仓库。");
@@ -252,7 +267,6 @@ async function refresh(initialData = null) {
     const selected = (!changedRepository && [...state.branches, ...state.tags].find(b => b.ref === state.branch?.ref)) ||
       state.branches.find(b => b.current) || state.branches[0];
     branchExpansion.use(repo.path, selected);
-    if (changedRepository) branchFocusId = "";
     if (selected) selectBranch(selected, {reveal: !changedRepository && state.branch?.ref !== selected.ref});
     else {
       closeDetail();
@@ -357,6 +371,7 @@ async function loadHistory(more = false) {
     state.hasMore = data.has_more;
     state.commits.push(...data.commits);
     renderCommits();
+    if (data.commits.some(commit => commit.sha === state.branch?.sha)) $("history-focus-note").hidden = true;
     $("load-more").hidden = !state.hasMore;
     GitI18n.text($("history-status"), () => GitI18n.t("已显示 ") + state.commits.length + GitI18n.t(" 条") +
       (state.hasMore ? GitI18n.t(" · 可继续加载") : GitI18n.t(" · 已到末尾")));
@@ -657,7 +672,7 @@ function renderRepositoryContext(context) {
   checks.replaceChildren(); paths.replaceChildren();
   checks.hidden = !context;
   paths.hidden = !context?.paths?.length;
-  $("recheck-context").hidden = !context;
+  $("recheck-context").hidden = !context && !state.repository;
   $("repo-manual-divider").hidden = !context;
   $("open-repo").classList.toggle("primary", !context);
   if (!context) {
@@ -667,7 +682,7 @@ function renderRepositoryContext(context) {
   const message = context.message_status, repository = context.repository_status;
   GitI18n.text($("repo-picker-title"), () => repository === "not_found" ? GitI18n.t("当前项目未检测到 Git 仓库") :
     repository === "unavailable" ? GitI18n.t("暂时无法检查 Git 仓库") :
-    repository === "multiple" ? GitI18n.t("选择当前项目的 Git 仓库") :
+    repository === "multiple" || repository === "partial" ? GitI18n.t("选择当前项目的 Git 仓库") :
     message === "sent" ? GitI18n.t("暂未识别当前项目目录") :
     message === "not_sent" ? GitI18n.t("请先发送一条消息") : GitI18n.t("先确认任务已发送消息"));
   function step(number, title, value, description, status) {
@@ -681,13 +696,16 @@ function renderRepositoryContext(context) {
   }
   step(1, () => GitI18n.t("任务消息"), () => message === "sent" ? GitI18n.t("已发送") : message === "not_sent" ? GitI18n.t("尚未发送") : GitI18n.t("待确认"),
     () => message === "sent" ? GitI18n.t("已检测到当前任务的用户消息。") :
+    context.paths?.length ? GitI18n.t("已取得当前任务的项目目录。") :
     message === "not_sent" ? GitI18n.t("请先发送一条消息，再关闭并重新打开「Git 分支」。") :
     GitI18n.t("若还没发过消息，请先发送；若已经发送，请关闭并重新打开「Git 分支」。"),
     message === "sent" ? "done" : "pending");
   step(2, () => GitI18n.t("项目 Git 仓库"), () => repository === "not_found" ? GitI18n.t("未检测到") :
-    repository === "unavailable" ? GitI18n.t("检查失败") : repository === "multiple" ? GitI18n.t("已找到多个") : GitI18n.t("待检查"),
+    repository === "unavailable" ? GitI18n.t("检查失败") : repository === "partial" ? GitI18n.t("部分已检查") :
+    repository === "multiple" ? GitI18n.t("已找到多个") : GitI18n.t("待检查"),
     () => repository === "not_found" ? GitI18n.t("已检查下方目录，未检测到 Git 仓库。") :
     repository === "unavailable" ? context.error || GitI18n.t("暂时无法读取项目，请重新检查或手动选择仓库。") :
+    repository === "partial" ? context.error || GitI18n.t("检查范围有限。可以手动打开其他仓库。") :
     repository === "multiple" ? GitI18n.t("从下方列表选择要查看的仓库。") : GitI18n.t("取得当前项目目录后，会自动检查 Git 仓库。"),
     repository === "multiple" ? "done" : repository === "pending" ? "pending" : "problem");
   if (context.paths?.length) {
@@ -695,7 +713,12 @@ function renderRepositoryContext(context) {
     for (const path of context.paths) paths.append(el("code", "", () => path));
   }
 }
-function showRepositoryPicker(data = null) {
+function focusRepositoryPicker() {
+  const target = $("repo-candidates").firstElementChild ||
+    ($("recheck-context").hidden ? $("repo-input") : $("recheck-context"));
+  target.focus();
+}
+function showRepositoryPicker(data = repositoryChoices) {
   renderRepositoryContext(data?.context);
   GitI18n.text($("repo-picker-message"), () => data?.reason || GitI18n.t("输入本地仓库的完整路径，查看分支和提交记录。"));
   const candidates = $("repo-candidates");
@@ -712,38 +735,45 @@ function showRepositoryPicker(data = null) {
   if (!state.repository) {
     GitI18n.text($("repo-name"), () => GitI18n.t("选择仓库"));
     $("repo-input").value = data?.suggested_path || "";
-    document.querySelector(".workspace").hidden = true;
   }
+  closeBranches();
+  document.body.classList.add("picking-repository");
   $("repo-picker").hidden = false;
   $("cancel-repo").hidden = !state.repository;
   window.GitGithub?.context(data);
-  if (data?.context) $("recheck-context").focus(); else $("repo-input").focus();
+  focusRepositoryPicker();
+}
+function repositoryPickerBusy(busy) {
+  for (const id of ["open-repo", "choose-repo", "recheck-context", "cancel-repo"]) $(id).disabled = busy;
+  for (const button of $("repo-candidates").children) button.disabled = busy;
 }
 $("recheck-context").addEventListener("click", async () => {
-  $("recheck-context").disabled = true;
-  try { await refresh(); } finally { $("recheck-context").disabled = false; }
+  repositoryPickerBusy(true);
+  try { await refresh(null, {resolveWorkspace: true}); }
+  finally {
+    repositoryPickerBusy(false);
+    if ($("repo-picker").hidden) $("choose-repo").focus(); else focusRepositoryPicker();
+  }
 });
 $("choose-repo").addEventListener("click", () => showRepositoryPicker());
 $("cancel-repo").addEventListener("click", () => {
   $("repo-picker").hidden = true;
+  document.body.classList.remove("picking-repository");
   clearError(); $("choose-repo").focus();
 });
 async function openRepository(path) {
   if (!path || $("open-repo").disabled) return;
-  $("open-repo").disabled = true;
-  for (const button of $("repo-candidates").children) button.disabled = true;
+  repositoryPickerBusy(true);
+  $("refresh").disabled = true;
   clearError();
   try {
     const data = await nativeHost.query("branches", {repo: path});
-    // Discard any in-flight results from the previously selected repository.
-    for (const controller of controllers.values()) controller.abort();
-    state.historyVersion++; state.detailVersion++; state.patchVersion++;
-    state.branch = null; closeDetail();
     await refresh(data);
   } catch (err) { error(err); }
   finally {
-    $("open-repo").disabled = false;
-    for (const button of $("repo-candidates").children) button.disabled = false;
+    repositoryPickerBusy(false);
+    $("refresh").disabled = false;
+    if ($("repo-picker").hidden) $("choose-repo").focus();
   }
 }
 bindForm($("repo-picker"), $("open-repo"), () => openRepository($("repo-input").value.trim()));

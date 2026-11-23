@@ -141,15 +141,20 @@ class McpTests(unittest.TestCase):
     def test_stdio_lifecycle_and_parse_error_recovery(self):
         requests = ["not json", json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}),
                     json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
-                    json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "git_panel", "arguments": {}}})]
+                    json.dumps({"jsonrpc": "2.0", "id": 2, "method": "resources/read", "params": {"uri": URI}}),
+                    json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "git_panel", "arguments": {}}})]
+        # Python's default encoding for a redirected Windows pipe can be a
+        # legacy code page. The MCP protocol still expects UTF-8.
         process = subprocess.run([sys.executable, str(ROOT / "scripts/mcp_server.py")], cwd=self.repo,
-                                 input="\n".join(requests) + "\n", text=True, capture_output=True, timeout=10)
+                                 env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+                                 input=("\n".join(requests) + "\n").encode(), capture_output=True, timeout=10)
         self.assertEqual(process.returncode, 0, process.stderr)
         responses = [json.loads(line) for line in process.stdout.splitlines()]
-        self.assertEqual(len(responses), 3)
+        self.assertEqual(len(responses), 4)
         self.assertEqual(responses[0]["error"]["code"], -32700)
         self.assertEqual(responses[1]["result"]["protocolVersion"], "2025-06-18")
-        self.assertEqual(responses[2]["result"]["_meta"]["gitExplorer"]["repository"]["path"], str(self.repo))
+        self.assertIn("Git 分支浏览器", responses[2]["result"]["contents"][0]["text"])
+        self.assertEqual(responses[3]["result"]["_meta"]["gitExplorer"]["repository"]["path"], str(self.repo))
 
 
 if __name__ == "__main__":
