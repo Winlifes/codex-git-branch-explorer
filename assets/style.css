@@ -387,4 +387,22 @@ input[type=checkbox]:indeterminate::after{content:"";display:block;width:8px;hei
 .github-preview-target{display:flex;justify-content:space-between;gap:16px;border:1px solid var(--line);border-radius:8px;padding:16px;overflow-wrap:anywhere;margin-bottom:16px}.github-preview-target[data-visibility="public"]{border-color:var(--accent)}
 .github-excluded{margin:16px 0;font-size:12px}.github-excluded code{display:block;overflow-wrap:anywhere;padding:4px 0}.github-job-state{font-size:16px;font-weight:600;line-height:1.6}.github-job-steps{padding-left:24px;line-height:2}
 .github-modal #github-content>.muted{font-size:12px;line-height:1.6;margin:8px 0 16px}
+.history-scope-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;font-size:11px}
+.history-scope-row>label{color:var(--muted)}.history-scope-row .button,.history-scope-row .select-trigger{font-size:11px;min-height:30px}
+#history-scope-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-focus-note{font-size:11px;line-height:1.6;color:var(--muted);margin:0 0 10px}
+.history-branches-modal{width:min(560px,calc(100vw - 28px))}.history-branches-modal .operations-header p{font-size:11px;line-height:1.6;margin-top:7px}
+#history-branch-search{width:100%;font-size:12px}.history-selection-tools{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 0;font-size:11px}
+.history-selection-tools .text-button{font-size:11px}.history-selection-tools>span{margin-left:auto}
+.history-branches-list{max-height:min(48vh,420px);overflow:auto;border:1px solid var(--line);border-radius:6px;scrollbar-gutter:stable}
+.history-choice-group{font-size:10px;font-weight:500;color:var(--muted);padding:9px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.history-branch-choice{display:flex;align-items:center;gap:9px;min-height:35px;padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--line)}
+.history-branch-choice:last-child{border-bottom:0}.history-branch-choice:hover{background:var(--hover)}.history-branch-choice:has(input:checked){background:var(--tint)}
+.history-branch-choice>input{width:15px;height:15px;flex:0 0 15px;margin:0}.history-branch-choice>.ui-icon{flex-shrink:0;color:var(--muted)}
+.history-choice-name{min-width:0;overflow-wrap:anywhere}.history-branch-choice .badge{margin-left:auto}
+.commit.current-head{background:color-mix(in srgb,var(--accent) 8%,var(--bg))}.commit.focused-tip{box-shadow:inset 2px 0 var(--accent)}
+.commit.current-head.selected{background:var(--selection)}
+.commit-references{display:flex;align-items:center;gap:4px;max-width:65%;min-width:0;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.commit-references:empty{display:none}.commit-references::-webkit-scrollbar{display:none}.commit-ref.head{color:var(--text);border-color:var(--border-strong);background:var(--hover)}
+@media(max-width:760px){.history-scope-row{gap:7px}.history-scope-row>span.muted{flex-basis:100%}.history-branches-modal .operations-body{padding:14px}.history-heading p{padding-right:0;margin-top:8px}.history-heading h1{padding-right:160px}}
 @media(max-width:520px){.github-start{align-items:stretch;flex-direction:column}.github-visibility{grid-template-columns:1fr}.github-modal .operations-footer{gap:8px}.github-modal .operations-footer .button{padding:10px 12px}}

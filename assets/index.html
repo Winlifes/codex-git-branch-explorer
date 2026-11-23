@@ -10,6 +10,7 @@
   <script src="./i18n.js" defer></script>
   <script src="./controls.js" defer></script>
   <script src="./branch-tree.js" defer></script>
+  <script src="./history-scope.js" defer></script>
   <script src="./commit-graph.js" defer></script>
   <script src="./file-tree.js" defer></script>
   <script src="./diff-view.js" defer></script>
@@ -91,6 +92,13 @@
         </div>
       </div>
       <form id="filters" class="filters">
+        <div class="history-scope-row">
+          <label for="history-scope">日志范围</label>
+          <select id="history-scope" aria-label="日志范围"><option value="all">全部分支</option><option value="selected">所选分支</option></select>
+          <button id="choose-history-branches" class="button" type="button" data-icon="branch">选择分支…</button>
+          <span id="history-scope-summary" class="muted"></span>
+        </div>
+        <p id="history-focus-note" class="history-focus-note" role="status" hidden></p>
         <div class="search-row">
           <input id="commit-search" type="search" maxlength="300" placeholder="搜索提交信息…" aria-label="搜索提交信息">
           <input id="author-search" type="search" maxlength="300" placeholder="作者或邮箱" aria-label="按作者或邮箱筛选">
@@ -160,6 +168,15 @@
   </main>
   <footer class="statusbar"><span class="tiny-dot"></span><span id="status-branch">Git</span><span class="status-divider">/</span><span id="repo-path"></span><span class="toolbar-spacer"></span><span id="status-selection"></span><span id="status-updated">本地读取</span></footer>
   <dialog id="diff-dialog" class="diff-dialog" aria-labelledby="full-diff-path"><header class="operations-header"><code id="full-diff-path"></code><button id="close-full-diff" class="icon-button" data-icon="close" aria-label="关闭差异"></button></header><pre id="full-diff" aria-label="文件差异"></pre></dialog>
+  <dialog id="history-branches-dialog" class="operations-modal history-branches-modal" aria-labelledby="history-branches-title">
+    <header class="operations-header"><div><h2 id="history-branches-title">选择日志分支</h2><p class="muted">同时展示勾选分支的历史，不切换工作区。</p></div><button id="close-history-branches" class="icon-button" data-icon="close" aria-label="关闭分支选择"></button></header>
+    <div class="operations-body">
+      <input id="history-branch-search" type="search" placeholder="搜索分支或标签…" aria-label="搜索日志分支" autocomplete="off">
+      <div class="history-selection-tools"><button id="history-default-branches" class="text-button" type="button">当前分支与主干</button><button id="history-clear-branches" class="text-button" type="button">清空选择</button><span id="history-selected-count" class="muted" role="status"></span></div>
+      <div id="history-branches-list" class="history-branches-list" role="group" aria-label="日志分支选择"></div>
+    </div>
+    <footer class="operations-footer"><button id="cancel-history-branches" class="button">取消</button><button id="apply-history-branches" class="button primary">应用筛选</button></footer>
+  </dialog>
   <dialog id="operation-dialog" class="operations-modal" aria-labelledby="operation-title">
     <header class="operations-header"><h2 id="operation-title">Git 操作</h2><button id="close-operation" class="icon-button" data-icon="close" aria-label="关闭操作"></button></header>
     <div class="operations-body"><div id="operation-content"></div><p id="operation-error" class="operations-error" role="alert" hidden></p></div>

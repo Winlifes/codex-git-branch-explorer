@@ -21,7 +21,7 @@ This is an independently developed, third-party plugin distributed through this 
 | Area | What you can do |
 | --- | --- |
 | Branches | Browse local and remote-tracking branches in collapsible folders, search full branch paths, identify the current branch and see upstream ahead/behind status. |
-| History | Compact commit rows with a colored topology graph, ref badges, authors, dates and hashes; pagination, search and first-parent filtering. |
+| History | Multiple branch tips in one graph with real parent/merge edges, all/selected branch scopes, HEAD and ref badges; pagination, search and first-parent filtering. |
 | Commit details | See the full message, author, SHA, date and time, added/deleted line counts, changed files and per-file diffs. Choose a parent for merge commit diffs. |
 | Working tree | Persistent Commit tab with directory checkboxes, tracked/untracked groups, staging controls and a bottom composer; commit selected files or staged content. |
 | Stashes | Inspect staged, working-tree and untracked snapshots separately; save changes, apply while retaining the record, or preview deleting a stash. |
@@ -33,7 +33,13 @@ This is an independently developed, third-party plugin distributed through this 
 | Appearance | Follow the Codex theme or select light/dark mode, with themed menus, thin scrollbars and a branch drawer for narrow panels. |
 | Language | Follow the Codex language with English and Simplified Chinese UI, including menus, previews, errors, dates and number formatting. Live changes preserve drafts and selections. |
 
-Selecting a branch changes the history you are browsing; it does not check it out. **Refresh** rereads local Git data; use **Fetch** to update remote-tracking branches.
+The log defaults to **All branches**, combining local and remote-tracking branches in one graph. Use **Choose branches…** to check the current branch, `master`, `origin/master`, or any other branches/tags, then **Apply filter**. **Current and mainline branches** restores the preset. Scope preferences are stored locally per repository.
+
+![Multi-branch log: current branch, master and origin/master tips with merge edges](docs/screenshots/multi-branch-log-dark.png)
+
+Clicking a branch changes the explicit operation target and locates its tip if loaded; it does not change the log scope or check out that branch. Load more or narrow the scope if the tip has not been loaded. `HEAD` marks the current worktree, and ref badges identify branch tips. Shared commits appear once; unmerged commits on other included branches remain visible.
+
+**Refresh** rereads local Git data; use **Fetch** to update remote-tracking branches. Pages contain 50 commits by default and retain the initial commit IDs, ref labels and HEAD across pagination. Refreshing or starting a new filtered query reads updated roots and labels together. **Clear filters** clears text, author and first-parent conditions while preserving the log scope. Text/author search shows matching nodes without drawing false links across omitted commits.
 
 ### Branch folders
 
@@ -84,7 +90,7 @@ The installer copies the plugin to `~/plugins/git-branch-explorer`, configures t
 
 1. Open an existing or new Codex task for your Git project.
 2. Open the right panel, click **＋**, then select **Git**. Hosts that provide a language during tool discovery may label it **Git Branches** or **Git 分支**.
-3. Select a branch to browse its history. Open **Working tree** to inspect and manage local changes.
+3. Browse **All branches**, or use **Choose branches…** to view selected histories together. Open **Commit** to inspect and manage local changes.
 
 If the entry is missing after installation, let running tasks finish, quit and reopen Codex, then return to your task. Existing tasks are supported; there is no need to recreate them.
 
@@ -169,7 +175,7 @@ node --test tests/*.test.cjs
 python3 scripts/build_release.py
 ```
 
-Node.js 18+ is needed only for the branch tree tests, not to run the plugin. These tests cover folder grouping, ref identity, search and per-repository expansion preferences. Write-operation tests use disposable repositories and local bare remotes. The build creates a ZIP and SHA-256 checksum in `dist/`, including both READMEs and the screenshots. Git history and local installation configuration are excluded.
+Node.js 18+ is needed only for JavaScript tests, not to run the plugin. These tests cover branch folders, log scope preferences, ref decorations, graph topology and diff rendering. Write-operation tests use disposable repositories and local bare remotes. The build creates a ZIP and SHA-256 checksum in `dist/`, including both READMEs and the screenshots. Git history and local installation configuration are excluded.
 
 A standalone, read-only browser mode is also available for debugging:
 

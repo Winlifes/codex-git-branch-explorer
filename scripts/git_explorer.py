@@ -186,16 +186,60 @@ class Repository:
                            "subject": subject, "message": message.rstrip("\n")})
         return result
 
-    def commits(self, ref="HEAD", limit=50, offset=0, query="", author="", first_parent=False):
+    def commits(self, ref="HEAD", limit=50, offset=0, query="", author="", first_parent=False,
+                refs=None, all_branches=False, snapshot=None):
         limit = bounded_int(limit, 50, 1, 200)
         offset = bounded_int(offset, 0, 0, 10_000_000)
+        if type(all_branches) is not bool or type(first_parent) is not bool:
+            raise GitError(ui("无效的日志范围参数。"))
+        if refs is not None and (not isinstance(refs, list) or not 1 <= len(refs) <= 4096 or
+                                 any(not isinstance(item, str) or len(item) > 1024 for item in refs)):
+            raise GitError(ui("请选择 1 至 4096 个有效分支。"))
+        if refs is not None and all_branches:
+            raise GitError(ui("全部分支与所选分支不能同时指定。"))
+        if snapshot is not None and (not isinstance(snapshot, list) or len(snapshot) > 4096 or
+                                     any(not isinstance(oid, str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid)
+                                         for oid in snapshot)):
+            raise GitError(ui("无效的日志分页快照。"))
         for text in (query, author):
             if not isinstance(text, str) or len(text) > 300 or "\0" in text or "\n" in text:
                 raise GitError(ui("搜索词最长 300 个字符，且不能包含换行。"))
-        if ref == "HEAD" and not self.info()["head"]:
+        multiple = refs is not None or all_branches or snapshot is not None
+        context = {}
+        if snapshot is not None:
+            # Page against immutable object IDs, even if branches move or disappear.
+            roots = list(dict.fromkeys(snapshot))
+        elif multiple:
+            catalog = self.branches()
+            context = {"log_context": catalog}
+            info = catalog["repository"]
+            known = {item["ref"]: item["sha"] for item in catalog["branches"] + catalog["tags"]}
+            # The attached branch may advance between info() and for-each-ref.
+            # Decorate the same branch tip that supplies this query's roots.
+            if info["current_ref"] in known:
+                info["head"] = known[info["current_ref"]]
+            known["HEAD"] = info["head"]
+            if info["head"]:
+                known[info["head"]] = info["head"]
+            if all_branches:
+                roots = [item["sha"] for item in catalog["branches"] if item["sha"]]
+                if info["head"]:
+                    roots.append(info["head"])
+            else:
+                if any(item not in known for item in refs):
+                    raise GitError(ui("所选分支已变化，请刷新后重新选择。"))
+                roots = [known[item] for item in refs if known[item]]
+            roots = list(dict.fromkeys(roots))
+            if len(roots) > 4096:
+                raise GitError(ui("分支过多，请缩小日志范围。"))
+        elif ref == "HEAD" and not self.info()["head"]:
             return {"commits": [], "has_more": False, "next_offset": 0, "snapshot": None}
-        snapshot = self.oid(ref)
-        args = ["log", "-z", "--topo-order", "--no-decorate", "--encoding=UTF-8", "--format=" + FORMAT,
+        else:
+            roots = [self.oid(ref)]
+        frozen = roots if multiple else roots[0]
+        if not roots:
+            return {"commits": [], "has_more": False, "next_offset": 0, "snapshot": frozen, **context}
+        args = ["log", "-z", "--date-order", "--no-decorate", "--encoding=UTF-8", "--format=" + FORMAT,
                 "--max-count=" + str(limit + 1), "--skip=" + str(offset), "--fixed-strings", "--regexp-ignore-case"]
         if query:
             args.append("--grep=" + query)
@@ -203,7 +247,7 @@ class Repository:
             args.append("--author=" + author)
         if first_parent:
             args.append("--first-parent")
-        items = self.parse_commits(self.git(*args, snapshot, "--"))
+        items = self.parse_commits(self.git(*args, *roots, "--"))
         page = items[:limit]
         try:
             stats = self.commit_stats([item["sha"] for item in page])
@@ -215,7 +259,7 @@ class Repository:
                 item["stats"] = None
                 item["stats_error"] = error_message(error)
         return {"commits": page, "has_more": len(items) > limit,
-                "next_offset": offset + min(len(items), limit), "snapshot": snapshot}
+                "next_offset": offset + min(len(items), limit), "snapshot": frozen, **context}
 
     def commit_stats(self, object_ids):
         """Batch line counts for one page, relative to each commit's first parent."""
@@ -375,6 +419,7 @@ class Handler(BaseHTTPRequestHandler):
                   "operations.js": ("operations.js", "text/javascript; charset=utf-8"),
                   "controls.js": ("controls.js", "text/javascript; charset=utf-8"),
                   "branch-tree.js": ("branch-tree.js", "text/javascript; charset=utf-8"),
+                  "history-scope.js": ("history-scope.js", "text/javascript; charset=utf-8"),
                   "commit-graph.js": ("commit-graph.js", "text/javascript; charset=utf-8"),
                   "file-tree.js": ("file-tree.js", "text/javascript; charset=utf-8"),
                   "diff-view.js": ("diff-view.js", "text/javascript; charset=utf-8"),
@@ -403,7 +448,10 @@ class Handler(BaseHTTPRequestHandler):
                 value = repo.branches()
             elif path == "api/commits":
                 value = repo.commits(get("ref", "HEAD"), get("limit", "50"), get("offset", "0"),
-                                     get("query"), get("author"), get("first_parent") == "true")
+                                     get("query"), get("author"), get("first_parent") == "true",
+                                     refs=json.loads(get("refs")) if "refs" in params else None,
+                                     all_branches=get("all_branches") == "true",
+                                     snapshot=json.loads(get("snapshot")) if "snapshot" in params else None)
             elif path == "api/commit":
                 value = repo.commit(get("sha"), get("parent", "0"))
             elif path == "api/patch":
@@ -486,6 +534,9 @@ def main():
             p.add_argument("--ready-file")
         if command == "log":
             p.add_argument("--ref", default="HEAD")
+            p.add_argument("--refs", nargs="+")
+            p.add_argument("--all-branches", action="store_true")
+            p.add_argument("--snapshot", nargs="+")
             p.add_argument("--limit", type=int, default=50)
             p.add_argument("--offset", type=int, default=0)
             p.add_argument("--query", default="")
@@ -505,7 +556,8 @@ def main():
             if args.command == "branches":
                 value = repo.branches()
             elif args.command == "log":
-                value = repo.commits(args.ref, args.limit, args.offset, args.query, args.author, args.first_parent)
+                value = repo.commits(args.ref, args.limit, args.offset, args.query, args.author, args.first_parent,
+                                     args.refs, args.all_branches, args.snapshot)
             else:
                 value = repo.commit(args.sha, args.parent)
             print(json.dumps(value, ensure_ascii=False, indent=2))

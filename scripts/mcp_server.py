@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 URI = "ui://git-branch-explorer/v0.5/panel.html"
 PREVIOUS_URI = "ui://git-branch-explorer/v0.5.1/panel.html"
 MIME = "text/html;profile=mcp-app"
-VERSION = "0.7.2"
+VERSION = "0.8.1"
 ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False,
                "idempotentHint": True, "openWorldHint": False}
 REPO_PROPERTY = {"type": "string", "description": ui("本地 Git 仓库的绝对路径；省略时自动读取当前 Codex 任务的项目目录。")}
@@ -38,6 +38,9 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {
          "action": {"type": "string", "enum": ["branches", "commits", "commit", "patch", "status", "working_patch", "stashes", "commit_message"]},
          "repo": REPO_PROPERTY, "ref": {"type": "string"}, "sha": {"type": "string"},
+         "refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 4096},
+         "all_branches": {"type": "boolean"},
+         "snapshot": {"type": "array", "items": {"type": "string"}, "maxItems": 4096},
          "path": {"type": "string"}, "parent": {"type": "integer", "minimum": 0},
          "offset": {"type": "integer", "minimum": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 200},
          "query": {"type": "string", "maxLength": 300}, "author": {"type": "string", "maxLength": 300},
@@ -115,12 +118,12 @@ def panel_html():
     html = html.replace('<script src="./operations.js" defer></script>', "")
     html = html.replace('<script src="./controls.js" defer></script>', "")
     html = html.replace('<script src="./branch-tree.js" defer></script>', "")
-    for name in ("commit-graph.js", "file-tree.js", "diff-view.js", "stashes.js", "workbench.js", "github.js"):
+    for name in ("history-scope.js", "commit-graph.js", "file-tree.js", "diff-view.js", "stashes.js", "workbench.js", "github.js"):
         html = html.replace('<script src="./' + name + '" defer></script>', "")
     html = html.replace('<script src="./locales/en.js" defer></script>', "")
     html = html.replace('<script src="./i18n.js" defer></script>', "")
     scripts = "window.GitEnglish = " + (assets / "locales/en.json").read_text(encoding="utf-8") + ";\n"
-    scripts += "\n".join((assets / name).read_text(encoding="utf-8") for name in ("i18n.js", "mcp-bridge.js", "controls.js", "branch-tree.js", "commit-graph.js", "file-tree.js", "diff-view.js", "app.js", "operations.js", "stashes.js", "workbench.js", "github.js"))
+    scripts += "\n".join((assets / name).read_text(encoding="utf-8") for name in ("i18n.js", "mcp-bridge.js", "controls.js", "branch-tree.js", "history-scope.js", "commit-graph.js", "file-tree.js", "diff-view.js", "app.js", "operations.js", "stashes.js", "workbench.js", "github.js"))
     return html.replace("</body>", "<script>" + scripts.replace("</script", "<\\/script") + "</script></body>")
 
 
@@ -248,7 +251,7 @@ class Server:
             data = repo.stashes()
         elif action == "commits":
             data = repo.commits(**{k: args[k] for k in
-                ("ref", "limit", "offset", "query", "author", "first_parent") if k in args})
+                ("ref", "refs", "all_branches", "snapshot", "limit", "offset", "query", "author", "first_parent") if k in args})
         elif action == "commit" and args.get("sha"):
             data = repo.commit(args["sha"], args.get("parent", 0))
         elif action == "patch" and args.get("sha") and "path" in args:
